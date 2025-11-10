@@ -3,13 +3,14 @@ dist/
 coverage/
 .env
 .env.local
-.env.*
+.env.production
+.env.vault
 logs/
+
+# Allow .env.example to be committed
+!.env.example
 npm-debug.log*
 yarn-error.log*
 .DS_Store
 uploads/
-AGENTS.md
-FRONT_END_AGENTS.md
-GOOGLE_OAUTH_SETUP.md
 .github/
