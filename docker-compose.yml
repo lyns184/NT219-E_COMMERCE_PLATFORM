@@ -79,7 +79,9 @@ services:
       VAULT_TOKEN: myroot
       
       # CORS
-      CORS_ORIGIN: http://localhost:3000
+      CORS_ORIGIN: http://localhost:5173
+      CLIENT_ORIGIN: http://localhost:5173
+      FRONTEND_URL: http://localhost:5173
       
       # Stripe (get from https://stripe.com)
       STRIPE_SECRET_KEY: sk_test_your_stripe_secret_key
@@ -100,7 +102,7 @@ services:
       
       # API URL
       API_URL: http://localhost:5000/api
-      FRONTEND_URL: http://localhost:3000
+      FRONTEND_URL: http://localhost:5173
       
     depends_on:
       mongodb:
@@ -124,6 +126,10 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: http://localhost:5000/api/v1
+        VITE_STRIPE_PUBLISHABLE_KEY: pk_test_your_stripe_publishable_key
+        VITE_GOOGLE_CLIENT_ID: your-google-client-id.apps.googleusercontent.com
     container_name: nt219-frontend
     restart: unless-stopped
     ports:
