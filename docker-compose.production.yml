@@ -120,12 +120,7 @@ services:
   # Frontend (React + Nginx)
   # ===========================================
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        VITE_API_BASE_URL: https://api.security-test.site/api/v1
-        VITE_APP_URL: https://security-test.site
+    image: jackydev2006/nt219-frontend:latest
     container_name: nt219-frontend-prod
     restart: unless-stopped
     ports:
