@@ -344,7 +344,7 @@ export const detectPaymentFraud = async (
     // Check IP consistency
     if (metadata.ip && recentPayments.length > 0) {
       const recentIPs = recentPayments
-        .map(p => p.metadata?.get('ip'))
+        .map(p => p.metadata?.ip)
         .filter(Boolean);
       
       const uniqueIPs = new Set(recentIPs);
