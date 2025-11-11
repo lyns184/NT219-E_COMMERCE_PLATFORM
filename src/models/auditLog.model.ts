@@ -75,6 +75,9 @@ const auditLogSchema = new Schema<IAuditLog>(
         'admin.user_access',
         'admin.config_change',
         'admin.data_export',
+        'admin.product_created',
+        'admin.product_updated',
+        'admin.product_deleted',
         
         // Security events
         'security.failed_login',
