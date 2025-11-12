@@ -168,9 +168,17 @@ export const AdminOrdersPage = () => {
                 </Thead>
                 <Tbody>
                   {filteredOrders?.map(order => {
-                    const userEmail = typeof order.user === 'string' 
-                      ? order.user 
-                      : order.user.email || order.user._id;
+                    // Safely get user email, handle null/undefined cases
+                    let userEmail = 'Unknown User';
+                    if (order.user) {
+                      if (typeof order.user === 'string') {
+                        userEmail = order.user;
+                      } else if (order.user.email) {
+                        userEmail = order.user.email;
+                      } else if (order.user._id) {
+                        userEmail = order.user._id;
+                      }
+                    }
                     
                     return (
                       <Tr key={order._id}>
