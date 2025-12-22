@@ -31,6 +31,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useLocation, useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../features/auth/AuthProvider';
 import { useApiErrorToast } from '../hooks/useApiErrorToast';
+import { useOAuth } from '../hooks/useOAuth';
 
 const MotionBox = motion(Box);
 
@@ -54,12 +55,14 @@ export const LoginPage = () => {
   const navigate = useNavigate();
   const toastError = useApiErrorToast();
   const toast = useToast();
+  const { login: loginGitHub, isLoading: isGitHubLoading } = useOAuth('github');
+  const { login: loginDiscord, isLoading: isDiscordLoading } = useOAuth('discord');
 
   const cardBg = useColorModeValue('white', 'gray.800');
   const textSecondary = useColorModeValue('gray.600', 'gray.400');
   const heroBg = useColorModeValue(
-    'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    'linear-gradient(135deg, #4c51bf 0%, #553c9a 100%)'
+    'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)',
+    'linear-gradient(135deg, #4F46E5 0%, #4338CA 100%)'
   );
 
   const onSubmit = useCallback(
@@ -96,31 +99,20 @@ export const LoginPage = () => {
         
         // Normal login - redirect to intended page
         const redirectPath = (location.state as { from?: { pathname?: string } } | undefined)?.from?.pathname ?? '/';
+        toast({ 
+          title: 'Welcome back!', 
+          status: 'success', 
+          duration: 2000, 
+          position: 'top',
+          isClosable: true 
+        });
         navigate(redirectPath, { replace: true });
       } catch (error) {
-        toastError(error, 'Login failed');
+        toastError(error);
       }
     },
     [login, location.state, navigate, toastError, toast]
   );
-
-  const handleGitHubLogin = () => {
-    // Redirect to backend GitHub OAuth endpoint
-    const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
-    window.location.href = `${apiUrl}/oauth/github`;
-  };
-
-  const handleDiscordLogin = () => {
-    // Redirect to backend Discord OAuth endpoint
-    const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
-    window.location.href = `${apiUrl}/oauth/discord`;
-  };
-
-  const handleOAuth2Login = () => {
-    // Redirect to backend OAuth2 endpoint
-    const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
-    window.location.href = `${apiUrl}/oauth/oauth2`;
-  };
 
   return (
     <Box minH="100vh" display="flex" alignItems="center" position="relative" overflow="hidden">
@@ -174,7 +166,8 @@ export const LoginPage = () => {
                   {/* GitHub Sign-In Button */}
                   <Button
                     leftIcon={<Icon as={FaGithub} />}
-                    onClick={handleGitHubLogin}
+                    onClick={loginGitHub}
+                    isLoading={isGitHubLoading}
                     variant="outline"
                     size="lg"
                     width="full"
@@ -191,7 +184,8 @@ export const LoginPage = () => {
                   {/* Discord Sign-In Button */}
                   <Button
                     leftIcon={<Icon as={FaDiscord} />}
-                    onClick={handleDiscordLogin}
+                    onClick={loginDiscord}
+                    isLoading={isDiscordLoading}
                     variant="outline"
                     size="lg"
                     width="full"

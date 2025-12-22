@@ -84,7 +84,6 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
         // Normal login - set token and user
         setAccessToken(result.tokens.accessToken);
         setUser(result.user);
-        toast({ title: 'Welcome back!', status: 'success', duration: 3000, position: 'top' });
         return result;
       } catch (error) {
         const message = (error as { response?: { data?: ApiError } }).response?.data?.message ?? 'Login failed';
@@ -121,7 +120,9 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
     try {
       await apiLogout();
     } catch (error) {
-      console.warn('Failed to logout', error);
+      if (import.meta.env.DEV) {
+        console.warn('Failed to logout', error);
+      }
     } finally {
       clearAccessToken();
       setUser(null);

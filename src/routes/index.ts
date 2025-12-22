@@ -8,7 +8,6 @@ import oauthRoutes from './oauth.routes';
 import analyticsRoutes from './analytics.routes';
 import userRoutes from './user.routes';
 import auditRoutes from './audit.routes';
-import testRoutes from './test.routes';
 import healthRoutes from './health.routes';
 
 const router = Router();
@@ -25,10 +24,5 @@ router.use('/cart', cartRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/users', userRoutes);
 router.use('/admin', auditRoutes); // Admin audit routes
-
-// Test routes (development only)
-if (process.env.NODE_ENV === 'development') {
-  router.use('/test', testRoutes);
-}
 
 export default router;

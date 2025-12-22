@@ -3,6 +3,7 @@ import { StatusCodes } from 'http-status-codes';
 import { verifyAccessToken, generateFingerprint } from '../utils/jwt';
 import { sendError } from '../utils/apiResponse';
 import { UserModel, UserRole } from '../models/user.model';
+import { appConfig } from '../config/env';
 import logger from '../utils/logger';
 
 const getTokenFromHeader = (req: Request): string | null => {
@@ -69,8 +70,10 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
         ipAddress
       }, 'Device fingerprint mismatch - possible token theft');
       
-      // Allow but log suspicious activity (strict mode would reject)
-      // In production, you may want to send email alert here
+      // SECURITY: Block in production to prevent token theft
+      if (appConfig.env === 'production') {
+        return sendError(res, StatusCodes.UNAUTHORIZED, 'Session invalid. Please login again.');
+      }
     }
 
     // Attach user to request

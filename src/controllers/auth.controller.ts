@@ -24,6 +24,7 @@ import { sendSuccess, sendError } from '../utils/apiResponse';
 import { authConfig, appConfig } from '../config/env';
 import { durationToMs } from '../utils/time';
 import { generateFingerprint } from '../utils/jwt';
+import { trackFailedLogin, resetFailedLogin } from '../middleware/rateLimiter';
 import logger from '../utils/logger';
 
 const REFRESH_COOKIE_NAME = 'refreshToken';
@@ -130,6 +131,9 @@ export const loginHandler = async (req: Request, res: Response) => {
       });
     }
 
+    // SECURITY: Reset failed login tracking on successful login
+    resetFailedLogin(req, req.body.email);
+
     // Normal login without 2FA
     setRefreshCookie(res, result.tokens.refreshToken);
     
@@ -141,6 +145,9 @@ export const loginHandler = async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
+    // SECURITY: Track failed login attempt
+    trackFailedLogin(req, req.body.email);
+    
     logger.warn({ err: error, email: req.body.email }, 'Login failed');
     return sendError(res, StatusCodes.UNAUTHORIZED, (error as Error).message);
   }
@@ -153,6 +160,9 @@ export const login2FAHandler = async (req: Request, res: Response) => {
 
     const result = await loginWith2FA(tempToken, code, deviceInfo);
     
+    // SECURITY: Reset failed login tracking on successful 2FA login
+    resetFailedLogin(req);
+    
     setRefreshCookie(res, result.tokens.refreshToken);
     
     return sendSuccess(res, StatusCodes.OK, {
@@ -163,6 +173,9 @@ export const login2FAHandler = async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
+    // SECURITY: Track failed 2FA attempt
+    trackFailedLogin(req);
+    
     logger.warn({ err: error }, '2FA login failed');
     return sendError(res, StatusCodes.UNAUTHORIZED, (error as Error).message);
   }
@@ -172,7 +185,8 @@ export const login2FAHandler = async (req: Request, res: Response) => {
 
 export const refreshHandler = async (req: Request, res: Response) => {
   try {
-    const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME] ?? req.body?.refreshToken;
+    // SECURITY: Only accept refresh token from HttpOnly cookie, not from body
+    const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME];
     if (!refreshToken) {
       return sendError(res, StatusCodes.UNAUTHORIZED, 'Refresh token missing');
     }

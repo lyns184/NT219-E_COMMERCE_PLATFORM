@@ -103,15 +103,21 @@ export default function AuditLogsPage() {
       if (resultFilter) params.append('result', resultFilter);
       if (minRiskScore) params.append('minRiskScore', minRiskScore);
 
-      console.log('Fetching audit logs:', `/admin/audit-logs?${params}`);
+      if (import.meta.env.DEV) {
+        console.log('Fetching audit logs:', `/admin/audit-logs?${params}`);
+      }
       const response = await apiClient.get(`/admin/audit-logs?${params}`);
-      console.log('Audit logs response:', response.data);
+      if (import.meta.env.DEV) {
+        console.log('Audit logs response:', response.data);
+      }
       
       setLogs(response.data.data.logs);
       setTotalLogs(response.data.data.total);
     } catch (err: any) {
-      console.error('Audit logs fetch error:', err);
-      console.error('Error response:', err.response);
+      if (import.meta.env.DEV) {
+        console.error('Audit logs fetch error:', err);
+        console.error('Error response:', err.response);
+      }
       toast({
         title: 'Error fetching logs',
         description: err.response?.data?.message || err.message || 'Failed to fetch audit logs',
@@ -126,13 +132,19 @@ export default function AuditLogsPage() {
 
   const fetchStats = async () => {
     try {
-      console.log('Fetching audit stats');
+      if (import.meta.env.DEV) {
+        console.log('Fetching audit stats');
+      }
       const response = await apiClient.get('/admin/audit-stats');
-      console.log('Stats response:', response.data);
+      if (import.meta.env.DEV) {
+        console.log('Stats response:', response.data);
+      }
       setStats(response.data.data);
     } catch (err: any) {
-      console.error('Failed to fetch stats:', err);
-      console.error('Stats error response:', err.response);
+      if (import.meta.env.DEV) {
+        console.error('Failed to fetch stats:', err);
+        console.error('Stats error response:', err.response);
+      }
     }
   };
 

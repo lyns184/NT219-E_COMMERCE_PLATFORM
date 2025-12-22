@@ -17,23 +17,25 @@ const customEmailValidation = (value: string, helpers: Joi.CustomHelpers) => {
   return value;
 };
 
-// Registration
-export const registerSchema = Joi.object({
-  email: Joi.string()
-    .email()
-    .custom(customEmailValidation)
-    .required()
-    .messages({
-      'string.disposableEmail': 'Disposable email addresses are not allowed'
-    }),
+// Registration - SECURITY: Block mass assignment attacks
+export const registerSchema = Joi.object({  email: Joi.string()
+    .email({ minDomainSegments: 2, tlds: { allow: true } })
+    .lowercase()
+    .trim()
+    .max(255)
+    .required(),
   password: Joi.string()
-    .pattern(passwordRegex)
+    .min(12)
+    .max(128)
     .required()
-    .messages({
-      'string.pattern.base': 'Password must be at least 12 characters and include uppercase, lowercase, number, and special character.'
-    }),
-  role: Joi.string().valid('user', 'admin').optional()
-});
+    .pattern(passwordRegex),
+  name: Joi.string()
+    .trim()
+    .min(2)
+    .max(100)
+    .optional()
+    .pattern(/^[a-zA-ZÀ-ỹ\s'-]+$/)
+}).options({ stripUnknown: true });
 
 // Email verification
 export const verifyEmailSchema = Joi.object({
@@ -44,13 +46,29 @@ export const resendVerificationSchema = Joi.object({
   email: Joi.string().email().required()
 });
 
-// Login
+// Login - SECURITY: Enhanced validation
 export const loginSchema = Joi.object({
-  email: Joi.string().email().required(),
-  password: Joi.string().required(),
-  deviceId: Joi.string().optional(),
-  deviceName: Joi.string().optional()
-});
+  email: Joi.string()
+    .email({ minDomainSegments: 2, tlds: { allow: true } })
+    .lowercase()
+    .trim()
+    .max(255)
+    .required()
+    .custom(customEmailValidation)
+    .messages({
+      'string.email': 'Please provide a valid email address',
+      'string.empty': 'Email is required',
+      'string.max': 'Email must not exceed 255 characters',
+      'string.disposableEmail': 'Disposable email addresses are not allowed'
+    }),
+  password: Joi.string()
+    .required()
+    .messages({
+      'string.empty': 'Password is required'
+    }),
+  deviceId: Joi.string().max(100).optional(),
+  deviceName: Joi.string().max(100).optional()
+}).options({ stripUnknown: true });
 
 // 2FA Login
 export const login2FASchema = Joi.object({

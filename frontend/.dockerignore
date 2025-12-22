@@ -2,6 +2,7 @@
 node_modules
 npm-debug.log
 yarn-error.log
+yarn.lock
 
 # Build output
 dist
@@ -9,8 +10,8 @@ build
 
 # Environment files
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
 # IDE
 .vscode
@@ -26,11 +27,14 @@ Thumbs.db
 # Git
 .git
 .gitignore
+.gitattributes
 
 # Testing
 coverage
+.nyc_output
 
 # Logs
+logs
 *.log
 
 # Temporary files
@@ -38,9 +42,10 @@ tmp
 temp
 *.tmp
 
+# Docker files
+Dockerfile*
+docker-compose*.yml
+
 # Documentation
 *.md
-
-# Docker
-Dockerfile
-.dockerignore
+LICENSE

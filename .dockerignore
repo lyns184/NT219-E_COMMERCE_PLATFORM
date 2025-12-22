@@ -2,16 +2,16 @@
 node_modules
 npm-debug.log
 yarn-error.log
+yarn.lock
 
-# Build output
+# Build output (will be created in container)
 dist
 build
-.next
 
-# Environment files
+# Environment files (use Docker environment instead)
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
 # IDE
 .vscode
@@ -27,6 +27,7 @@ Thumbs.db
 # Git
 .git
 .gitignore
+.gitattributes
 
 # Testing
 coverage
@@ -41,20 +42,16 @@ tmp
 temp
 *.tmp
 
+# Docker files (don't copy into image)
+Dockerfile*
+docker-compose*.yml
+
+# Frontend (separate build)
+frontend
+
+# Uploads (mounted as volume)
+uploads
+
 # Documentation
 *.md
-docs
-
-# Docker
-Dockerfile
-docker-compose.yml
-.dockerignore
-
-# CI/CD
-.github
-.gitlab-ci.yml
-
-# Frontend specific
-frontend/node_modules
-frontend/dist
-frontend/build
+LICENSE

@@ -54,6 +54,7 @@ export const CartPage = () => {
     try {
       await removeItem(productId);
       toast({
+        id: `cart-remove-${productId}`,
         title: 'Item removed',
         status: 'success',
         duration: 2000,
@@ -61,14 +62,7 @@ export const CartPage = () => {
         isClosable: true
       });
     } catch (error) {
-      toast({
-        title: 'Failed to remove item',
-        description: (error as Error).message,
-        status: 'error',
-        duration: 3000,
-        position: 'top',
-        isClosable: true
-      });
+      // Error already handled by useApiErrorToast
     }
   };
 
@@ -76,13 +70,7 @@ export const CartPage = () => {
     try {
       await updateQuantity(productId, quantity);
     } catch (error) {
-      toast({
-        title: 'Failed to update quantity',
-        description: (error as Error).message,
-        status: 'error',
-        duration: 3000,
-        position: 'top'
-      });
+      // Error already handled by useApiErrorToast
     }
   };
 
@@ -90,19 +78,15 @@ export const CartPage = () => {
     try {
       await clearCart();
       toast({
+        id: 'cart-cleared',
         title: 'Cart cleared',
         status: 'success',
         duration: 2000,
-        position: 'top'
+        position: 'top',
+        isClosable: true
       });
     } catch (error) {
-      toast({
-        title: 'Failed to clear cart',
-        description: (error as Error).message,
-        status: 'error',
-        duration: 3000,
-        position: 'top'
-      });
+      // Error already handled by useApiErrorToast
     }
   };
 
@@ -114,11 +98,13 @@ export const CartPage = () => {
 
     if (items.length === 0) {
       toast({
+        id: 'cart-empty-warning',
         title: 'Cart is empty',
         description: 'Please add items to your cart before checkout',
         status: 'warning',
         duration: 3000,
-        position: 'top'
+        position: 'top',
+        isClosable: true
       });
       return;
     }

@@ -44,8 +44,8 @@ RUN npm ci --only=production && \
 # Copy built files from builder stage
 COPY --from=builder /app/dist ./dist
 
-# Copy necessary files
-COPY --chown=nodejs:nodejs uploads ./uploads
+# Create uploads directory (will be mounted as volume)
+RUN mkdir -p uploads/prototypes && chown -R nodejs:nodejs uploads
 
 # Switch to non-root user
 USER nodejs
@@ -55,7 +55,7 @@ EXPOSE 5000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:5000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+    CMD node -e "require('http').get('http://localhost:5000/api/v1/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]

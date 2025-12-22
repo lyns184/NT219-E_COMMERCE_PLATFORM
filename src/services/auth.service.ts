@@ -51,7 +51,7 @@ const sanitizeUser = (user: UserDocument) => {
 export interface RegisterInput {
   email: string;
   password: string;
-  role?: UserRole;
+  // NOTE: role removed - users cannot self-assign roles
 }
 
 export const registerUser = async (input: RegisterInput, deviceInfo: DeviceInfo) => {
@@ -65,11 +65,11 @@ export const registerUser = async (input: RegisterInput, deviceInfo: DeviceInfo)
   const verificationToken = generateSecureToken();
   const verificationExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
-  // Create user
+  // Create user - role is ALWAYS 'user' for security
   const user = new UserModel({
     email: input.email,
     password: input.password,
-    role: input.role || 'user',
+    role: 'user', // SECURITY: Always default to 'user', admin must be assigned manually
     provider: 'local',
     isEmailVerified: false,
     emailVerificationToken: verificationToken,

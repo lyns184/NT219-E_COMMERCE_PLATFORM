@@ -25,6 +25,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../features/auth/AuthProvider';
 import { useApiErrorToast } from '../hooks/useApiErrorToast';
+import { useOAuth } from '../hooks/useOAuth';
 
 const MotionBox = motion(Box);
 
@@ -58,12 +59,13 @@ export const RegisterPage = () => {
   const { register: registerUser } = useAuth();
   const navigate = useNavigate();
   const toastError = useApiErrorToast();
+  const { login: loginGoogle, isLoading: isGoogleLoading } = useOAuth('google');
 
   const cardBg = useColorModeValue('white', 'gray.800');
   const textSecondary = useColorModeValue('gray.600', 'gray.400');
   const heroBg = useColorModeValue(
-    'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    'linear-gradient(135deg, #4c51bf 0%, #553c9a 100%)'
+    'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)',
+    'linear-gradient(135deg, #4F46E5 0%, #4338CA 100%)'
   );
 
   const onSubmit = useCallback(
@@ -76,17 +78,11 @@ export const RegisterPage = () => {
           state: { email: values.email, justRegistered: true }
         });
       } catch (error) {
-        toastError(error, 'Registration failed');
+        toastError(error);
       }
     },
     [navigate, registerUser, toastError]
   );
-
-  const handleGoogleSignup = () => {
-    // Redirect to backend Google OAuth endpoint
-    const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
-    window.location.href = `${apiUrl}/auth/google`;
-  };
 
   return (
     <Box minH="100vh" display="flex" alignItems="center" position="relative" overflow="hidden">
@@ -138,7 +134,8 @@ export const RegisterPage = () => {
                 {/* Google Sign-Up Button */}
                 <Button
                   leftIcon={<Icon as={FaGoogle} />}
-                  onClick={handleGoogleSignup}
+                  onClick={loginGoogle}
+                  isLoading={isGoogleLoading}
                   variant="outline"
                   size="lg"
                   width="full"

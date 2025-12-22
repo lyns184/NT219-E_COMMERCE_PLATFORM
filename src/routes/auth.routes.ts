@@ -36,7 +36,7 @@ import {
   regenerateBackupCodesSchema,
   revokeSessionSchema
 } from '../validators/auth.validator';
-import { authRateLimiter, strictRateLimiter } from '../middleware/rateLimiter';
+import { authRateLimiter, strictRateLimiter, checkLoginBlock } from '../middleware/rateLimiter';
 import { authenticate, requireEmailVerified } from '../middleware/authMiddleware';
 
 const router = Router();
@@ -47,8 +47,9 @@ router.post('/verify-email', validateRequest(verifyEmailSchema), verifyEmailHand
 router.post('/resend-verification', authRateLimiter, validateRequest(resendVerificationSchema), resendVerificationHandler);
 
 // ============= Login & 2FA =============
-router.post('/login', authRateLimiter, validateRequest(loginSchema), loginHandler);
-router.post('/login/2fa', authRateLimiter, validateRequest(login2FASchema), login2FAHandler);
+// SECURITY: checkLoginBlock provides additional IP+email based blocking beyond rate limiting
+router.post('/login', authRateLimiter, checkLoginBlock, validateRequest(loginSchema), loginHandler);
+router.post('/login/2fa', authRateLimiter, checkLoginBlock, validateRequest(login2FASchema), login2FAHandler);
 
 // ============= Token Management =============
 router.post('/refresh', validateRequest(refreshSchema), refreshHandler);

@@ -42,8 +42,8 @@ export const ProductsPage = () => {
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
 
   const heroBg = useColorModeValue(
-    'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    'linear-gradient(135deg, #4c51bf 0%, #553c9a 100%)'
+    'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)',
+    'linear-gradient(135deg, #4F46E5 0%, #4338CA 100%)'
   );
   const cardBg = useColorModeValue('white', 'gray.800');
   const overlayBg = useColorModeValue('rgba(0, 0, 0, 0.5)', 'rgba(0, 0, 0, 0.7)');
@@ -291,6 +291,7 @@ export const ProductsPage = () => {
 
                         await addItem(product._id, 1);
                         toast({
+                          id: `cart-add-${product._id}`,
                           title: 'Added to cart',
                           description: product.name,
                           status: 'success',
@@ -299,14 +300,10 @@ export const ProductsPage = () => {
                           isClosable: true
                         });
                       } catch (err) {
-                        console.error('Add to cart failed', err);
-                        toast({
-                          title: 'Failed to add to cart',
-                          description: (err as Error).message,
-                          status: 'error',
-                          duration: 3000,
-                          position: 'top'
-                        });
+                        if (import.meta.env.DEV) {
+                          console.error('Add to cart failed', err);
+                        }
+                        // Error already handled by useApiErrorToast in mutation
                       }
                     }}
                   >

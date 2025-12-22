@@ -157,17 +157,14 @@ export const ProductDetailsPage = () => {
         description: `${quantity} x ${product.name}`,
         status: 'success',
         duration: 2000,
-        position: 'top'
+        position: 'top',
+        isClosable: true
       });
     } catch (error) {
-      console.error('Add to cart error:', error);
-      toast({
-        title: 'Failed to add to cart',
-        description: (error as Error).message,
-        status: 'error',
-        duration: 3000,
-        position: 'top'
-      });
+      if (import.meta.env.DEV) {
+        console.error('Add to cart error:', error);
+      }
+      // Error already handled by mutation
     }
   };
 

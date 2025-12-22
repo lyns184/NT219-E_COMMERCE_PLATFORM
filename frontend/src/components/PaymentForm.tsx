@@ -41,7 +41,9 @@ export const PaymentForm = ({ items, orderId, onSuccess }: PaymentFormProps) => 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (!stripe || !elements) {
-      console.warn('Stripe or Elements not ready');
+      if (import.meta.env.DEV) {
+        console.warn('Stripe or Elements not ready');
+      }
       return;
     }
 

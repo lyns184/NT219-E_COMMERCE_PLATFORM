@@ -24,7 +24,9 @@ export const OAuthCallbackPage = () => {
 
       if (error) {
         // Handle error
-        console.error('OAuth error:', error);
+        if (import.meta.env.DEV) {
+          console.error('OAuth error:', error);
+        }
         setTimeout(() => {
           if (!cancelled) {
             navigate('/login', { 
@@ -36,7 +38,9 @@ export const OAuthCallbackPage = () => {
       }
 
       if (!token) {
-        console.error('No token received from OAuth callback');
+        if (import.meta.env.DEV) {
+          console.error('No token received from OAuth callback');
+        }
         setTimeout(() => {
           if (!cancelled) {
             navigate('/login', { 

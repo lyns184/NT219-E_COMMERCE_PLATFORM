@@ -75,13 +75,51 @@ export const signRefreshToken = (payload: RefreshTokenInput): string => {
 
 /**
  * Verify Access Token with fingerprint validation
+ * SECURITY: Explicitly specify allowed algorithms to prevent algorithm confusion attacks
  */
 export const verifyAccessToken = (
   token: string,
   fingerprint?: string
 ): AccessTokenPayload => {
   const secret: Secret = authConfig.accessToken.secret;
-  const payload = jwt.verify(token, secret) as AccessTokenPayload;
+  
+  // SECURITY: Validate token format first
+  const parts = token.split('.');
+  if (parts.length !== 3) {
+    throw new Error('Invalid token format');
+  }
+  
+  // SECURITY: Check algorithm in header BEFORE verification to prevent "none" algorithm attack
+  try {
+    const headerJson = Buffer.from(parts[0], 'base64url').toString('utf8');
+    const header = JSON.parse(headerJson);
+    
+    // CRITICAL: Reject "none" algorithm immediately
+    if (!header.alg || header.alg.toLowerCase() === 'none') {
+      throw new Error('Algorithm "none" is not allowed');
+    }
+    
+    // Only allow HS256 - reject all other algorithms
+    if (header.alg !== 'HS256') {
+      throw new Error(`Algorithm "${header.alg}" is not allowed. Only HS256 is supported.`);
+    }
+  } catch (e) {
+    if (e instanceof SyntaxError) {
+      throw new Error('Invalid token header');
+    }
+    throw e;
+  }
+  
+  // Now verify with strict options
+  const payload = jwt.verify(token, secret, {
+    algorithms: ['HS256'],  // SECURITY: Only allow HS256 algorithm
+    complete: false
+  }) as AccessTokenPayload;
+
+  // SECURITY: Validate required claims exist
+  if (!payload.sub || !payload.email || !payload.role) {
+    throw new Error('Invalid token payload: missing required claims');
+  }
 
   // Validate fingerprint if provided
   if (fingerprint && payload.fingerprint && payload.fingerprint !== fingerprint) {
@@ -93,10 +131,48 @@ export const verifyAccessToken = (
 
 /**
  * Verify Refresh Token
+ * SECURITY: Explicitly specify allowed algorithms
  */
 export const verifyRefreshToken = (token: string): RefreshTokenPayload => {
   const secret: Secret = authConfig.refreshToken.secret;
-  return jwt.verify(token, secret) as RefreshTokenPayload;
+  
+  // SECURITY: Validate token format first
+  const parts = token.split('.');
+  if (parts.length !== 3) {
+    throw new Error('Invalid token format');
+  }
+  
+  // SECURITY: Check algorithm in header BEFORE verification
+  try {
+    const headerJson = Buffer.from(parts[0], 'base64url').toString('utf8');
+    const header = JSON.parse(headerJson);
+    
+    // CRITICAL: Reject "none" algorithm
+    if (!header.alg || header.alg.toLowerCase() === 'none') {
+      throw new Error('Algorithm "none" is not allowed');
+    }
+    
+    // Only allow HS256
+    if (header.alg !== 'HS256') {
+      throw new Error(`Algorithm "${header.alg}" is not allowed`);
+    }
+  } catch (e) {
+    if (e instanceof SyntaxError) {
+      throw new Error('Invalid token header');
+    }
+    throw e;
+  }
+  
+  const payload = jwt.verify(token, secret, {
+    algorithms: ['HS256']  // SECURITY: Only allow HS256 algorithm
+  }) as RefreshTokenPayload;
+  
+  // SECURITY: Validate required claims
+  if (!payload.sub || !payload.family || payload.type !== 'refresh') {
+    throw new Error('Invalid refresh token payload');
+  }
+  
+  return payload;
 };
 
 /**

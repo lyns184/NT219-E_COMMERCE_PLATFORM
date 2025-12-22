@@ -1,4 +1,4 @@
-import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Badge,
   Box,
@@ -145,6 +145,7 @@ const ProductFormModal = ({
   const cardBg = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
   const bgAccent = useColorModeValue('gray.50', 'gray.900');
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
 
   useEffect(() => {
     if (initialValues) {
@@ -209,8 +210,8 @@ const ProductFormModal = ({
         </ModalHeader>
         <ModalCloseButton />
 
-        <ModalBody py={6}>
-          <Grid templateColumns={{ base: '1fr', lg: '2fr 1fr' }} gap={6}>
+        <ModalBody py={6} overflowY="auto">
+          <Grid templateColumns={{ base: '1fr', lg: '2fr 1fr' }} gap={6} alignItems="start">
             {/* Main Form Section */}
             <GridItem>
               <Tabs index={activeTab} onChange={setActiveTab} colorScheme="brand">
@@ -430,7 +431,7 @@ const ProductFormModal = ({
 
                   {/* Media Tab */}
                   <TabPanel px={0}>
-                    <Stack spacing={6} mt={4}>
+                    <Stack spacing={6} mt={4} maxH="calc(90vh - 300px)" overflowY="auto">
                       <FormControl>
                         <FormLabel fontWeight="semibold">Product Image</FormLabel>
                         <VStack spacing={4} align="stretch">
@@ -471,15 +472,28 @@ const ProductFormModal = ({
                                     borderRadius="md"
                                     overflow="hidden"
                                     width="100%"
-                                    maxH="300px"
+                                    minH="200px"
+                                    maxH="350px"
                                     bg="gray.100"
+                                    display="flex"
+                                    alignItems="center"
+                                    justifyContent="center"
+                                    position="relative"
+                                    cursor="pointer"
+                                    _hover={{ opacity: 0.8 }}
+                                    transition="opacity 0.2s"
+                                    onClick={() => setIsLightboxOpen(true)}
+                                    title="Click to view full size"
                                   >
                                     <Image
                                       src={previewToDisplay}
                                       alt="Product preview"
                                       objectFit="contain"
-                                      width="100%"
-                                      maxH="300px"
+                                      maxW="100%"
+                                      maxH="100%"
+                                      height="auto"
+                                      width="auto"
+                                      pointerEvents="none"
                                     />
                                   </Box>
                                   <HStack justify="space-between" width="100%">
@@ -657,6 +671,39 @@ const ProductFormModal = ({
           </Button>
         </ModalFooter>
       </ModalContent>
+
+      {/* Image Lightbox Modal */}
+      <Modal isOpen={isLightboxOpen} onClose={() => setIsLightboxOpen(false)} size="full" isCentered>
+        <ModalOverlay bg="blackAlpha.900" backdropFilter="blur(10px)" />
+        <ModalContent bg="transparent" boxShadow="none" m={0}>
+          <ModalCloseButton
+            position="fixed"
+            top={4}
+            right={4}
+            size="lg"
+            color="white"
+            bg="blackAlpha.600"
+            _hover={{ bg: 'blackAlpha.800' }}
+            zIndex={2}
+          />
+          <ModalBody
+            display="flex"
+            alignItems="center"
+            justifyContent="center"
+            p={8}
+            onClick={() => setIsLightboxOpen(false)}
+          >
+            <Image
+              src={previewToDisplay ?? ''}
+              alt="Full size preview"
+              maxW="90vw"
+              maxH="90vh"
+              objectFit="contain"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </ModalBody>
+        </ModalContent>
+      </Modal>
     </Modal>
   );
 };
@@ -724,18 +771,18 @@ export const AdminProductsPage = () => {
     return products.filter(product => product.name.toLowerCase().includes(query));
   }, [products, searchTerm]);
 
-  const handleCreate = () => {
+  const handleCreate = useCallback(() => {
     resetPrototypeState();
     setEditingProduct(undefined);
     onOpen();
-  };
+  }, [onOpen, resetPrototypeState]);
 
-  const handleEdit = (product: ProductDto) => {
+  const handleEdit = useCallback((product: ProductDto) => {
     resetPrototypeState();
     setEditingProduct(product);
     setExistingPrototypeUrl(resolveAssetUrl(product.prototypeImageUrl ?? undefined));
     onOpen();
-  };
+  }, [onOpen, resetPrototypeState]);
 
   const handleSubmit = async (values: ProductFormValues) => {
     try {

@@ -1,27 +1,22 @@
-version: '3.8'
-
 # ===========================================
-# Production Docker Compose Configuration
+# Docker Compose - Production Configuration
 # ===========================================
-# Domain: security-test.site
-# Use this on VPS for production deployment
+# Run: docker-compose -f docker-compose.prod.yml up -d
 # ===========================================
 
 services:
   # ===========================================
-  # MongoDB Database (No Authentication)
+  # MongoDB Database
   # ===========================================
   mongodb:
     image: mongo:7.0
     container_name: nt219-mongodb-prod
-    restart: unless-stopped
-    command: mongod --noauth
+    restart: always
     ports:
-      - "127.0.0.1:27017:27017"  # Only accessible from localhost
+      - "127.0.0.1:27017:27017"
     volumes:
       - mongodb_data:/data/db
       - mongodb_config:/data/configdb
-      - ./backups:/backups  # For database backups
     networks:
       - nt219-network
     healthcheck:
@@ -29,7 +24,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 40s
+      start_period: 30s
     logging:
       driver: "json-file"
       options:
@@ -42,26 +37,27 @@ services:
   vault:
     image: hashicorp/vault:latest
     container_name: nt219-vault-prod
-    restart: unless-stopped
+    restart: always
     ports:
-      - "127.0.0.1:8200:8200"  # Only accessible from localhost
+      - "127.0.0.1:8200:8200"
     environment:
       VAULT_ADDR: http://0.0.0.0:8200
       VAULT_API_ADDR: http://0.0.0.0:8200
-      VAULT_TOKEN: ${VAULT_ROOT_TOKEN}
     cap_add:
       - IPC_LOCK
     volumes:
       - vault_data:/vault/data
       - vault_logs:/vault/logs
+      - ./vault/config:/vault/config
     networks:
       - nt219-network
-    command: server -dev -dev-root-token-id=${VAULT_ROOT_TOKEN}
+    command: server -config=/vault/config/vault.hcl
     healthcheck:
       test: ["CMD", "vault", "status"]
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 30s
     logging:
       driver: "json-file"
       options:
@@ -69,33 +65,38 @@ services:
         max-file: "3"
 
   # ===========================================
-  # Backend API (Node.js)
-  # ===========================================
   # Backend API (Node.js + Express)
   # ===========================================
   backend:
-    image: jackydev2006/nt219-backend:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: nt219-backend-prod
-    restart: unless-stopped
+    restart: always
     ports:
-      - "127.0.0.1:5000:5000"  # Only accessible from localhost (nginx proxy)
-    env_file:
-      - .env
+      - "127.0.0.1:5000:5000"
     environment:
       NODE_ENV: production
       PORT: 5000
+      MONGO_URI: mongodb://mongodb:27017/security-nt219
+      TRUST_PROXY: "true"
+      VAULT_ENABLED: "true"
+      VAULT_ADDR: http://vault:8200
+      VAULT_SECRET_PATH: secret/data/demo-nt219
+    env_file:
+      - .env.production
     depends_on:
       mongodb:
         condition: service_healthy
       vault:
         condition: service_healthy
     volumes:
-      - ./uploads:/app/uploads  # Persistent file uploads
-      - ./logs:/app/logs  # Application logs
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
     networks:
       - nt219-network
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5000/api/v1/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -108,7 +109,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.8'
+          cpus: '1.0'
           memory: 1G
         reservations:
           cpus: '0.25'
@@ -118,11 +119,17 @@ services:
   # Frontend (React + Nginx)
   # ===========================================
   frontend:
-    image: jackydev2006/nt219-frontend:latest
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-https://api.yourdomain.com/api/v1}
+        VITE_STRIPE_PUBLISHABLE_KEY: ${VITE_STRIPE_PUBLISHABLE_KEY:-pk_live_CHANGE_THIS}
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-YOUR_GOOGLE_CLIENT_ID}
     container_name: nt219-frontend-prod
-    restart: unless-stopped
+    restart: always
     ports:
-      - "127.0.0.1:3000:80"  # Only accessible from localhost (nginx proxy)
+      - "127.0.0.1:3000:80"
     depends_on:
       - backend
     networks:
@@ -140,7 +147,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.2'
+          cpus: '0.5'
           memory: 256M
         reservations:
           cpus: '0.1'
@@ -152,12 +159,9 @@ services:
 networks:
   nt219-network:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
 
 # ===========================================
-# Volumes (Persistent Data)
+# Volumes
 # ===========================================
 volumes:
   mongodb_data:

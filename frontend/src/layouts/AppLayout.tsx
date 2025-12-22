@@ -99,15 +99,15 @@ export const AppLayout = ({ children }: Props) => {
             {/* Right Side Actions */}
             <HStack spacing={3}>
               {/* Cart Button */}
-              <IconButton
-                as={Link}
-                to="/cart"
-                aria-label="Shopping cart"
-                icon={<Icon as={FaShoppingCart} />}
-                variant="ghost"
-                position="relative"
-                size="lg"
-              >
+              <Box position="relative">
+                <IconButton
+                  as={Link}
+                  to="/cart"
+                  aria-label="Shopping cart"
+                  icon={<Icon as={FaShoppingCart} />}
+                  variant="ghost"
+                  size="lg"
+                />
                 {totalItems > 0 && (
                   <Badge
                     colorScheme="red"
@@ -118,10 +118,10 @@ export const AppLayout = ({ children }: Props) => {
                     fontSize="xs"
                     px={2}
                   >
-                    {totalItems}
+                    {totalItems > 99 ? '99+' : totalItems}
                   </Badge>
                 )}
-              </IconButton>
+              </Box>
 
               {/* Dark Mode Toggle */}
               <IconButton

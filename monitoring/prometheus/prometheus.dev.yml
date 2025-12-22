@@ -1,0 +1,20 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'demo-nt219-dev'
+    environment: 'development'
+
+# Scrape configurations
+scrape_configs:
+  # Backend Application Metrics (running on host)
+  - job_name: 'backend'
+    static_configs:
+      - targets: ['172.24.64.1:5000']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

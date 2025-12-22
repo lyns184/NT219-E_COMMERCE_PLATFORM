@@ -69,15 +69,26 @@ export const CheckoutPage = () => {
       if (orderId && import.meta.env.DEV) {
         try {
           await completePaymentDev(orderId);
-          console.log('[DEV] Order marked as paid');
+          if (import.meta.env.DEV) {
+            console.log('[DEV] Order marked as paid');
+          }
         } catch (devError) {
-          console.error('[DEV] Failed to mark order as paid:', devError);
+          if (import.meta.env.DEV) {
+            console.error('[DEV] Failed to mark order as paid:', devError);
+          }
           // Don't fail the whole flow if dev endpoint fails
         }
       }
       
       await clearCart();
-      toast({ title: 'Order placed successfully', status: 'success', duration: 4000, position: 'top' });
+      toast({ 
+        id: 'order-success',
+        title: 'Order placed successfully', 
+        status: 'success', 
+        duration: 4000, 
+        position: 'top',
+        isClosable: true
+      });
     } catch (error) {
       toastError(error, 'Order placed but failed to refresh cart');
     } finally {

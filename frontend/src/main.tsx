@@ -8,6 +8,7 @@ import App from './App';
 import './index.css';
 import { AuthProvider } from './features/auth/AuthProvider';
 import { CartProvider } from './features/cart/CartProvider';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import theme from './theme';
 
 const queryClient = new QueryClient({
@@ -21,18 +22,20 @@ const queryClient = new QueryClient({
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <ChakraProvider theme={theme}>
-      <ColorModeScript initialColorMode={theme.config.initialColorMode} />
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <CartProvider>
-            <BrowserRouter>
-              <App />
-            </BrowserRouter>
-          </CartProvider>
-        </AuthProvider>
-        <ReactQueryDevtools initialIsOpen={false} />
-      </QueryClientProvider>
-    </ChakraProvider>
+    <ErrorBoundary>
+      <ChakraProvider theme={theme}>
+        <ColorModeScript initialColorMode={theme.config.initialColorMode} />
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <CartProvider>
+              <BrowserRouter>
+                <App />
+              </BrowserRouter>
+            </CartProvider>
+          </AuthProvider>
+          <ReactQueryDevtools initialIsOpen={false} />
+        </QueryClientProvider>
+      </ChakraProvider>
+    </ErrorBoundary>
   </React.StrictMode>
 );

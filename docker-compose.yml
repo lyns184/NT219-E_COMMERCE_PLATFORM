@@ -1,0 +1,132 @@
+# ===========================================
+# Docker Compose - Development Configuration
+# ===========================================
+# Run: docker-compose up -d
+# ===========================================
+
+services:
+  # ===========================================
+  # MongoDB Database
+  # ===========================================
+  mongodb:
+    image: mongo:7.0
+    container_name: nt219-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - nt219-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ===========================================
+  # HashiCorp Vault (Secret Management)
+  # ===========================================
+  vault:
+    image: hashicorp/vault:latest
+    container_name: nt219-vault
+    restart: unless-stopped
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_ADDR: http://0.0.0.0:8200
+      VAULT_API_ADDR: http://0.0.0.0:8200
+      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_ROOT_TOKEN:-dev-only-token}
+    cap_add:
+      - IPC_LOCK
+    volumes:
+      - vault_data:/vault/data
+      - vault_logs:/vault/logs
+    networks:
+      - nt219-network
+    command: server -dev -dev-root-token-id=${VAULT_ROOT_TOKEN:-dev-only-token}
+    healthcheck:
+      test: ["CMD", "vault", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ===========================================
+  # Backend API (Node.js + Express)
+  # ===========================================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nt219-backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      NODE_ENV: development
+      PORT: 5000
+      MONGO_URI: mongodb://mongodb:27017/security-nt219
+      VAULT_ENABLED: ${VAULT_ENABLED:-false}
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: ${VAULT_ROOT_TOKEN:-dev-only-token}
+      VAULT_SECRET_PATH: secret/data/demo-nt219
+    env_file:
+      - .env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      vault:
+        condition: service_healthy
+    volumes:
+      - ./uploads:/app/uploads
+    networks:
+      - nt219-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ===========================================
+  # Frontend (React + Vite with Nginx)
+  # ===========================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: http://localhost:5000/api/v1
+    container_name: nt219-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - nt219-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+# ===========================================
+# Networks
+# ===========================================
+networks:
+  nt219-network:
+    driver: bridge
+
+# ===========================================
+# Volumes
+# ===========================================
+volumes:
+  mongodb_data:
+    driver: local
+  vault_data:
+    driver: local
+  vault_logs:
+    driver: local
