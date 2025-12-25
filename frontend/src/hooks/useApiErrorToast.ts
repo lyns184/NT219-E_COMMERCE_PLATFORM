@@ -15,17 +15,15 @@ export const useApiErrorToast = () => {
         // Try to extract detailed message from API response
         if ('response' in error) {
           const axiosError = error as AxiosError<ApiError>;
-          const apiMessage = axiosError.response?.data?.message;
-          const apiError = axiosError.response?.data?.error;
-          
+          const apiData = axiosError.response?.data;
+          const apiMessage = apiData?.message;
+          const apiDetails = typeof apiData?.details === 'string' ? apiData.details : undefined;
+
           if (apiMessage) {
             title = apiMessage;
-            description = undefined; // Clear description when we have specific API message
-          } else if (apiError) {
-            title = apiError;
-            description = undefined;
+            description = apiDetails;
           }
-        } 
+        }
         // Fallback to error.message if available
         else if ('message' in error && typeof (error as Error).message === 'string') {
           const errorMessage = (error as Error).message;
