@@ -4,14 +4,27 @@ import { v4 as uuid } from 'uuid';
 import { authConfig } from '../config/env';
 import type { AccessTokenPayload, RefreshTokenPayload } from '../types';
 
+// Re-export enhanced fingerprint functions from dedicated module
+export { 
+  generateEnhancedFingerprint,
+  generateFingerprintFromComponents,
+  generateLegacyFingerprint,
+  extractFingerprintComponents,
+  detectAutomation,
+  isSuspiciousUserAgent,
+  logFingerprintEvent
+} from './fingerprint';
+
 /**
  * Generate device fingerprint from user-agent and other data
+ * 
+ * @deprecated Use generateEnhancedFingerprint from './fingerprint' for better security
+ * This function is kept for backward compatibility but now uses the enhanced module internally
  */
 export const generateFingerprint = (userAgent: string, ipAddress: string): string => {
-  return crypto
-    .createHash('sha256')
-    .update(`${userAgent}:${ipAddress}`)
-    .digest('hex');
+  // Import the enhanced fingerprint function
+  const { generateFingerprintFromComponents } = require('./fingerprint');
+  return generateFingerprintFromComponents(userAgent, ipAddress);
 };
 
 /**

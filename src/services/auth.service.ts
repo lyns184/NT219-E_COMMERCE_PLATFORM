@@ -8,7 +8,8 @@ import {
   verifyRefreshToken,
   hashToken,
   generateSecureToken,
-  generateFingerprint
+  generateFingerprint,
+  generateFingerprintFromComponents
 } from '../utils/jwt';
 import {
   createRefreshToken,

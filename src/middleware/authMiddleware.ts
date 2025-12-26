@@ -1,6 +1,12 @@
 import { NextFunction, Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
-import { verifyAccessToken, generateFingerprint } from '../utils/jwt';
+import { verifyAccessToken } from '../utils/jwt';
+import { 
+  generateEnhancedFingerprint, 
+  extractFingerprintComponents,
+  detectAutomation,
+  logFingerprintEvent 
+} from '../utils/fingerprint';
 import { sendError } from '../utils/apiResponse';
 import { UserModel, UserRole } from '../models/user.model';
 import { appConfig } from '../config/env';
@@ -18,14 +24,14 @@ const getTokenFromHeader = (req: Request): string | null => {
   return token;
 };
 
-// Extract device info from request
+// Extract device info from request (enhanced)
 const extractDeviceInfo = (req: Request) => {
-  const userAgent = req.headers['user-agent'] || '';
-  const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || 
-                     req.socket.remoteAddress || 
-                     'unknown';
-  
-  return { userAgent, ipAddress };
+  const components = extractFingerprintComponents(req);
+  return { 
+    userAgent: components.userAgent, 
+    ipAddress: components.ipAddress,
+    components 
+  };
 };
 
 export const authenticate = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
@@ -57,23 +63,62 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
       return sendError(res, StatusCodes.FORBIDDEN, 'Account is temporarily locked');
     }
 
-    // Verify device fingerprint to prevent token theft
+    // SECURITY: Enhanced device fingerprint validation
+    // Uses multiple layers: IP, TLS, headers, browser-specific signals
     const { userAgent, ipAddress } = extractDeviceInfo(req);
-    const currentFingerprint = generateFingerprint(userAgent, ipAddress);
+    const currentFingerprint = generateEnhancedFingerprint(req);
+    
+    // Detect automation attempts
+    const automationResult = detectAutomation(req);
     
     if (payload.fingerprint && payload.fingerprint !== currentFingerprint) {
+      // Log fingerprint mismatch event for security monitoring
+      logFingerprintEvent('mismatch', req, {
+        userId: user.id,
+        storedFingerprint: payload.fingerprint,
+        currentFingerprint,
+        automationDetection: automationResult
+      });
+
       logger.warn({
         userId: user.id,
-        expectedFingerprint: payload.fingerprint,
-        actualFingerprint: currentFingerprint,
+        expectedFingerprint: payload.fingerprint?.substring(0, 16) + '...',
+        actualFingerprint: currentFingerprint.substring(0, 16) + '...',
         userAgent,
-        ipAddress
-      }, 'Device fingerprint mismatch - possible token theft');
+        ipAddress,
+        isAutomated: automationResult.isAutomated,
+        automationConfidence: automationResult.confidence,
+        automationReasons: automationResult.reasons
+      }, 'Device fingerprint mismatch - possible token theft or automation bypass');
       
-      // SECURITY: Block in production to prevent token theft
+      // SECURITY: Block fingerprint mismatch in production
+      // This prevents the device fingerprint bypass vulnerability
       if (appConfig.env === 'production') {
         return sendError(res, StatusCodes.UNAUTHORIZED, 'Session invalid. Please login again.');
       }
+      
+      // In development, also warn about high-confidence automation detection
+      if (automationResult.isAutomated && automationResult.confidence >= 70) {
+        logger.warn({
+          userId: user.id,
+          confidence: automationResult.confidence
+        }, 'High confidence automation detected with fingerprint mismatch');
+      }
+    }
+
+    // Additional check: Warn about automation even if fingerprint matches
+    // (attacker using same headers as login)
+    if (automationResult.isAutomated && automationResult.confidence >= 80) {
+      logFingerprintEvent('suspicious', req, {
+        userId: user.id,
+        automationDetection: automationResult
+      });
+      
+      logger.warn({
+        userId: user.id,
+        confidence: automationResult.confidence,
+        reasons: automationResult.reasons
+      }, 'High confidence automation detected - possible fingerprint bypass attack');
     }
 
     // Attach user to request

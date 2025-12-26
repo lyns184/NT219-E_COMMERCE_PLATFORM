@@ -23,7 +23,8 @@ import { UserModel } from '../models/user.model';
 import { sendSuccess, sendError } from '../utils/apiResponse';
 import { authConfig, appConfig } from '../config/env';
 import { durationToMs } from '../utils/time';
-import { generateFingerprint } from '../utils/jwt';
+import { generateFingerprint, generateEnhancedFingerprint } from '../utils/jwt';
+import { extractFingerprintComponents, detectAutomation } from '../utils/fingerprint';
 import { trackFailedLogin, resetFailedLogin } from '../middleware/rateLimiter';
 import logger from '../utils/logger';
 
@@ -46,16 +47,33 @@ const clearRefreshCookie = (res: Response) => {
   });
 };
 
-// Extract device info from request
+// Extract device info from request (enhanced with fingerprint components)
 const extractDeviceInfo = (req: Request) => {
   const deviceId = req.body.deviceId || req.headers['x-device-id'] as string;
   const deviceName = req.body.deviceName || 'Unknown Device';
-  const userAgent = req.headers['user-agent'] || '';
-  const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || 
-                     req.socket.remoteAddress || 
-                     'unknown';
   
-  return { deviceId, deviceName, userAgent, ipAddress };
+  // Use enhanced fingerprint components extraction
+  const components = extractFingerprintComponents(req);
+  
+  // Detect automation attempts during login
+  const automationResult = detectAutomation(req);
+  if (automationResult.isAutomated && automationResult.confidence >= 70) {
+    logger.warn({
+      ip: components.ipAddress,
+      userAgent: components.userAgent,
+      confidence: automationResult.confidence,
+      reasons: automationResult.reasons
+    }, 'Potential automation/bot detected during login');
+  }
+  
+  return { 
+    deviceId, 
+    deviceName, 
+    userAgent: components.userAgent, 
+    ipAddress: components.ipAddress,
+    // Pass additional components for enhanced fingerprint generation
+    fingerprintComponents: components
+  };
 };
 
 // ============= Registration & Email Verification =============
