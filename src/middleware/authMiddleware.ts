@@ -84,7 +84,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
         logger.info({
           userId: user.id,
           fingerprintType: 'legacy'
-        }, 'Legacy fingerprint detected - user should re-login for enhanced security');
+        }, 'Legacy fingerprint detected - user will get enhanced fingerprint on next login');
       } else {
         // Neither enhanced nor legacy fingerprint matches - possible attack
         logFingerprintEvent('mismatch', req, {
@@ -104,21 +104,14 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
           isAutomated: automationResult.isAutomated,
           automationConfidence: automationResult.confidence,
           automationReasons: automationResult.reasons
-        }, 'Device fingerprint mismatch - possible token theft or automation bypass');
+        }, 'Device fingerprint mismatch - WARNING ONLY (migration mode)');
         
-        // SECURITY: Block fingerprint mismatch in production
-        // This prevents the device fingerprint bypass vulnerability
-        if (appConfig.env === 'production') {
-          return sendError(res, StatusCodes.UNAUTHORIZED, 'Session invalid. Please login again.');
-        }
-        
-        // In development, also warn about high-confidence automation detection
-        if (automationResult.isAutomated && automationResult.confidence >= 70) {
-          logger.warn({
-            userId: user.id,
-            confidence: automationResult.confidence
-          }, 'High confidence automation detected with fingerprint mismatch');
-        }
+        // MIGRATION MODE: Only log warnings, don't block
+        // TODO: Enable blocking after all users have re-logged in
+        // Uncomment this after migration period (e.g., 7 days):
+        // if (appConfig.env === 'production') {
+        //   return sendError(res, StatusCodes.UNAUTHORIZED, 'Session invalid. Please login again.');
+        // }
       }
     }
 
