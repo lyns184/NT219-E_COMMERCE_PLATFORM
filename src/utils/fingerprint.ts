@@ -283,9 +283,14 @@ export function generateFingerprintFromComponents(
 
 /**
  * Legacy fingerprint for backward compatibility
- * DEPRECATED: Use generateEnhancedFingerprint instead
+ * 
+ * IMPORTANT: This must match the EXACT format used before the fix
+ * Format: sha256(userAgent:ipAddress)
+ * 
+ * DEPRECATED: Use generateEnhancedFingerprint for new tokens
  */
 export function generateLegacyFingerprint(userAgent: string, ipAddress: string): string {
+  // Must match exact format from before fix
   return crypto
     .createHash('sha256')
     .update(`${userAgent}:${ipAddress}`)

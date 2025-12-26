@@ -65,44 +65,60 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
 
     // SECURITY: Enhanced device fingerprint validation
     // Uses multiple layers: IP, TLS, headers, browser-specific signals
-    const { userAgent, ipAddress } = extractDeviceInfo(req);
-    const currentFingerprint = generateEnhancedFingerprint(req);
+    const { userAgent, ipAddress, components } = extractDeviceInfo(req);
+    const currentEnhancedFingerprint = generateEnhancedFingerprint(req);
     
     // Detect automation attempts
     const automationResult = detectAutomation(req);
     
-    if (payload.fingerprint && payload.fingerprint !== currentFingerprint) {
-      // Log fingerprint mismatch event for security monitoring
-      logFingerprintEvent('mismatch', req, {
-        userId: user.id,
-        storedFingerprint: payload.fingerprint,
-        currentFingerprint,
-        automationDetection: automationResult
-      });
+    if (payload.fingerprint && payload.fingerprint !== currentEnhancedFingerprint) {
+      // BACKWARD COMPATIBILITY: Try legacy fingerprint format
+      // This allows tokens created before the fix to still work
+      const { generateLegacyFingerprint } = require('../utils/fingerprint');
+      const currentLegacyFingerprint = generateLegacyFingerprint(userAgent, ipAddress);
+      
+      const matchesLegacy = payload.fingerprint === currentLegacyFingerprint;
+      
+      if (matchesLegacy) {
+        // Token uses old fingerprint format - allow but log for monitoring
+        logger.info({
+          userId: user.id,
+          fingerprintType: 'legacy'
+        }, 'Legacy fingerprint detected - user should re-login for enhanced security');
+      } else {
+        // Neither enhanced nor legacy fingerprint matches - possible attack
+        logFingerprintEvent('mismatch', req, {
+          userId: user.id,
+          storedFingerprint: payload.fingerprint,
+          currentFingerprint: currentEnhancedFingerprint,
+          automationDetection: automationResult
+        });
 
-      logger.warn({
-        userId: user.id,
-        expectedFingerprint: payload.fingerprint?.substring(0, 16) + '...',
-        actualFingerprint: currentFingerprint.substring(0, 16) + '...',
-        userAgent,
-        ipAddress,
-        isAutomated: automationResult.isAutomated,
-        automationConfidence: automationResult.confidence,
-        automationReasons: automationResult.reasons
-      }, 'Device fingerprint mismatch - possible token theft or automation bypass');
-      
-      // SECURITY: Block fingerprint mismatch in production
-      // This prevents the device fingerprint bypass vulnerability
-      if (appConfig.env === 'production') {
-        return sendError(res, StatusCodes.UNAUTHORIZED, 'Session invalid. Please login again.');
-      }
-      
-      // In development, also warn about high-confidence automation detection
-      if (automationResult.isAutomated && automationResult.confidence >= 70) {
         logger.warn({
           userId: user.id,
-          confidence: automationResult.confidence
-        }, 'High confidence automation detected with fingerprint mismatch');
+          expectedFingerprint: payload.fingerprint?.substring(0, 16) + '...',
+          enhancedFingerprint: currentEnhancedFingerprint.substring(0, 16) + '...',
+          legacyFingerprint: currentLegacyFingerprint.substring(0, 16) + '...',
+          userAgent,
+          ipAddress,
+          isAutomated: automationResult.isAutomated,
+          automationConfidence: automationResult.confidence,
+          automationReasons: automationResult.reasons
+        }, 'Device fingerprint mismatch - possible token theft or automation bypass');
+        
+        // SECURITY: Block fingerprint mismatch in production
+        // This prevents the device fingerprint bypass vulnerability
+        if (appConfig.env === 'production') {
+          return sendError(res, StatusCodes.UNAUTHORIZED, 'Session invalid. Please login again.');
+        }
+        
+        // In development, also warn about high-confidence automation detection
+        if (automationResult.isAutomated && automationResult.confidence >= 70) {
+          logger.warn({
+            userId: user.id,
+            confidence: automationResult.confidence
+          }, 'High confidence automation detected with fingerprint mismatch');
+        }
       }
     }
 
