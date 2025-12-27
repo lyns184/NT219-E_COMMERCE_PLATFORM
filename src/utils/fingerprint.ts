@@ -369,6 +369,8 @@ export function logFingerprintEvent(
     userId?: string;
     storedFingerprint?: string;
     currentFingerprint?: string;
+    storedIp?: string;
+    currentIp?: string;
     automationDetection?: ReturnType<typeof detectAutomation>;
   }
 ): void {
@@ -378,6 +380,8 @@ export function logFingerprintEvent(
     event: `fingerprint.${eventType}`,
     userId: details.userId,
     ip: components.ipAddress,
+    storedIp: details.storedIp,
+    currentIp: details.currentIp,
     userAgent: components.userAgent,
     storedFingerprint: details.storedFingerprint?.substring(0, 16) + '...',
     currentFingerprint: details.currentFingerprint?.substring(0, 16) + '...',
