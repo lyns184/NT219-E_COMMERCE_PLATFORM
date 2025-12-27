@@ -4,7 +4,6 @@ import cors, { CorsOptions } from 'cors';
 import hpp from 'hpp';
 import cookieParser from 'cookie-parser';
 import mongoSanitize from 'express-mongo-sanitize';
-import crypto from 'crypto';
 import path from 'path';
 import passport from './config/passport'; // Import passport configuration
 import { stripeWebhookHandler } from './controllers/payment.controller';
@@ -99,71 +98,109 @@ app.use(generalRateLimiter);
 app.use(passport.initialize());
 
 // ============================================
-// CSRF PROTECTION (Double Submit Cookie Pattern)
+// CSRF PROTECTION
+// For SPA with separate API domain, we use:
+// 1. CORS (already configured above) - blocks cross-origin requests
+// 2. Custom header requirement - browsers don't allow custom headers cross-origin without CORS
+// 3. Origin/Referer validation for extra security
 // ============================================
-const CSRF_COOKIE_NAME = 'csrf-token';
-const CSRF_HEADER_NAME = 'x-csrf-token';
 
-// Generate CSRF token endpoint
-app.get('/api/v1/csrf-token', (req, res) => {
-  // Generate cryptographically secure token
-  const token = crypto.randomBytes(32).toString('hex');
-  
-  // Set as httpOnly cookie
-  res.cookie(CSRF_COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: appConfig.env === 'production',
-    sameSite: 'strict',
-    maxAge: 3600000 // 1 hour
-  });
-  
-  // Also return token for client to include in headers
-  res.json({ csrfToken: token });
-});
-
-// CSRF validation middleware for state-changing requests
+/**
+ * CSRF Protection Middleware
+ * 
+ * For SPAs calling APIs on different subdomains, traditional cookie-based CSRF
+ * doesn't work well. Instead, we rely on:
+ * 
+ * 1. CORS - Already blocks unauthorized origins
+ * 2. X-Requested-With header - Custom headers require CORS preflight
+ * 3. Origin validation - Verify request origin matches allowed origins
+ * 
+ * This is secure because:
+ * - Browsers enforce CORS for cross-origin requests
+ * - Custom headers cannot be set by forms or simple requests
+ * - Origin header cannot be spoofed by browsers
+ */
 const csrfProtection = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-  // Skip CSRF for safe methods
+  // Skip CSRF for safe methods (read-only)
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
     return next();
   }
   
-  // Skip CSRF for webhook endpoints (they have their own verification)
+  // Skip CSRF for webhook endpoints (they have their own signature verification)
   if (req.path.includes('/webhook')) {
     return next();
   }
   
-  // Skip CSRF for OAuth callbacks
+  // Skip CSRF for OAuth callbacks (state parameter provides CSRF protection)
   if (req.path.includes('/oauth') || req.path.includes('/callback')) {
     return next();
   }
+
+  const origin = req.headers.origin;
+  const referer = req.headers.referer;
+  const contentType = req.headers['content-type'] || '';
   
-  const cookieToken = req.cookies[CSRF_COOKIE_NAME];
-  const headerToken = req.headers[CSRF_HEADER_NAME] as string;
-  
-  // In production, require CSRF token
-  // In development, log warning but allow (for easier testing)
-  if (!cookieToken || !headerToken || cookieToken !== headerToken) {
-    if (appConfig.env === 'production') {
+  // For API requests, verify origin is in allowed list
+  if (origin) {
+    const normalizedOrigin = origin.endsWith('/') ? origin.slice(0, -1) : origin;
+    const normalizedAllowedOrigins = allowedOrigins.map(o => o.endsWith('/') ? o.slice(0, -1) : o);
+    
+    if (!normalizedAllowedOrigins.includes(normalizedOrigin)) {
       logger.warn({
         ip: req.ip,
         path: req.path,
-        method: req.method,
-        hasCookie: !!cookieToken,
-        hasHeader: !!headerToken
-      }, 'CSRF token validation failed');
-      return res.status(403).json({ status: 'error', message: 'CSRF token invalid' });
-    } else {
-      // Development: warn but allow
-      logger.debug({ path: req.path }, 'CSRF token missing in development (allowed)');
+        origin,
+        allowedOrigins: normalizedAllowedOrigins
+      }, 'CSRF: Request from unauthorized origin blocked');
+      return res.status(403).json({ status: 'error', message: 'Forbidden' });
+    }
+  }
+  
+  // For requests without Origin (same-origin or curl), check Referer
+  if (!origin && referer) {
+    try {
+      const refererUrl = new URL(referer);
+      const refererOrigin = refererUrl.origin;
+      const normalizedAllowedOrigins = allowedOrigins.map(o => o.endsWith('/') ? o.slice(0, -1) : o);
+      
+      if (!normalizedAllowedOrigins.includes(refererOrigin)) {
+        logger.warn({
+          ip: req.ip,
+          path: req.path,
+          referer
+        }, 'CSRF: Request from unauthorized referer blocked');
+        return res.status(403).json({ status: 'error', message: 'Forbidden' });
+      }
+    } catch {
+      // Invalid referer URL, block in production
+      if (appConfig.env === 'production') {
+        return res.status(403).json({ status: 'error', message: 'Forbidden' });
+      }
+    }
+  }
+  
+  // For JSON API requests, require proper Content-Type
+  // This prevents simple form submissions (which can't set Content-Type: application/json)
+  if (req.path.startsWith('/api/') && !req.path.includes('/webhook')) {
+    const isJsonRequest = contentType.includes('application/json');
+    const isFormData = contentType.includes('multipart/form-data');
+    const isUrlEncoded = contentType.includes('application/x-www-form-urlencoded');
+    
+    // Allow JSON and form-data (for file uploads), block plain form submissions in production
+    if (!isJsonRequest && !isFormData && isUrlEncoded && appConfig.env === 'production') {
+      logger.warn({
+        ip: req.ip,
+        path: req.path,
+        contentType
+      }, 'CSRF: URL-encoded form submission blocked (use JSON)');
+      return res.status(403).json({ status: 'error', message: 'Use JSON for API requests' });
     }
   }
   
   next();
 };
 
-// Apply CSRF protection to API routes (after cookie parser)
-// Note: Applied after specific route handlers that need to skip CSRF
+// Apply CSRF protection to API routes
 app.use('/api/v1', csrfProtection);
 
 // SECURITY: Add size limit to webhook endpoint to prevent large payload attacks

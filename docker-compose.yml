@@ -26,6 +26,27 @@ services:
       start_period: 10s
 
   # ===========================================
+  # Redis (Distributed Rate Limiting & Caching)
+  # ===========================================
+  redis:
+    image: redis:7-alpine
+    container_name: nt219-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - nt219-network
+    command: redis-server --appendonly yes --maxmemory 100mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ===========================================
   # HashiCorp Vault (Secret Management)
   # ===========================================
   vault:
@@ -72,12 +93,16 @@ services:
       VAULT_ADDR: http://vault:8200
       VAULT_TOKEN: ${VAULT_ROOT_TOKEN:-dev-only-token}
       VAULT_SECRET_PATH: secret/data/demo-nt219
+      REDIS_ENABLED: "true"
+      REDIS_URL: redis://redis:6379
     env_file:
       - .env
     depends_on:
       mongodb:
         condition: service_healthy
       vault:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     volumes:
       - ./uploads:/app/uploads
@@ -129,4 +154,6 @@ volumes:
   vault_data:
     driver: local
   vault_logs:
+    driver: local
+  redis_data:
     driver: local

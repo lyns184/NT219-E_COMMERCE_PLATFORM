@@ -56,7 +56,10 @@ const envSchema = z.object({
   // Frontend URL for email links
   FRONTEND_URL: z.string().url().default('http://localhost:5173'),
   // Encryption key for sensitive data (AES-256 requires 32+ chars)
-  ENCRYPTION_KEY: z.string().min(32, 'ENCRYPTION_KEY must be at least 32 characters')
+  ENCRYPTION_KEY: z.string().min(32, 'ENCRYPTION_KEY must be at least 32 characters'),
+  // Redis configuration for distributed rate limiting
+  REDIS_URL: z.string().url().optional(),
+  REDIS_ENABLED: z.enum(['true', 'false']).default('false')
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -130,6 +133,11 @@ export const emailConfig = {
 export const urlConfig = {
   frontend: env.FRONTEND_URL,
   backend: `http://localhost:${env.PORT}`
+};
+
+export const redisConfig = {
+  enabled: env.REDIS_ENABLED === 'true',
+  url: env.REDIS_URL || 'redis://localhost:6379'
 };
 
 export { env };

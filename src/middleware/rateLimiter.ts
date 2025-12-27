@@ -1,12 +1,66 @@
 import rateLimit from 'express-rate-limit';
 import { Request, Response, NextFunction } from 'express';
-import { securityConfig } from '../config/env';
+import { securityConfig, redisConfig, appConfig } from '../config/env';
 import logger from '../utils/logger';
 import { detectAutomation, isSuspiciousUserAgent, logFingerprintEvent } from '../utils/fingerprint';
+import Redis from 'ioredis';
+import RedisStore from 'rate-limit-redis';
 
 // ============================================
-// IN-MEMORY FAILED LOGIN TRACKING
-// For production, use Redis for distributed systems
+// REDIS CLIENT FOR DISTRIBUTED RATE LIMITING
+// ============================================
+
+let redisClient: Redis | null = null;
+
+/**
+ * Initialize Redis client for distributed rate limiting
+ * Falls back to in-memory if Redis is not available
+ */
+const initRedisClient = (): Redis | null => {
+  if (!redisConfig.enabled) {
+    logger.info('Redis rate limiting disabled, using in-memory store');
+    return null;
+  }
+
+  try {
+    const client = new Redis(redisConfig.url, {
+      maxRetriesPerRequest: 3,
+      retryStrategy: (times) => {
+        if (times > 3) {
+          logger.warn('Redis connection failed after 3 retries, falling back to in-memory');
+          return null; // Stop retrying
+        }
+        return Math.min(times * 100, 3000);
+      },
+      lazyConnect: true
+    });
+
+    client.on('connect', () => {
+      logger.info('Redis connected for rate limiting');
+    });
+
+    client.on('error', (err) => {
+      logger.error({ err }, 'Redis connection error');
+    });
+
+    // Try to connect
+    client.connect().catch((err) => {
+      logger.warn({ err }, 'Failed to connect to Redis, using in-memory fallback');
+      redisClient = null;
+    });
+
+    return client;
+  } catch (err) {
+    logger.warn({ err }, 'Failed to initialize Redis client');
+    return null;
+  }
+};
+
+// Initialize on module load
+redisClient = initRedisClient();
+
+// ============================================
+// DISTRIBUTED FAILED LOGIN TRACKING (Redis/Memory)
 // ============================================
 
 interface FailedLoginRecord {
@@ -17,13 +71,15 @@ interface FailedLoginRecord {
   blockedUntil?: number;
 }
 
-const failedLogins = new Map<string, FailedLoginRecord>();
+// In-memory fallback (used when Redis is unavailable)
+const failedLoginsMemory = new Map<string, FailedLoginRecord>();
 
 // Configuration
 const LOGIN_ATTEMPT_WINDOW = 15 * 60 * 1000; // 15 minutes
 const MAX_FAILED_ATTEMPTS = 5;
 const BLOCK_DURATION = 30 * 60 * 1000; // 30 minutes block
 const PROGRESSIVE_DELAYS = [0, 1000, 2000, 5000, 10000]; // Progressive delay in ms
+const REDIS_KEY_PREFIX = 'ratelimit:login:';
 
 /**
  * Get client identifier for tracking (IP + optional email hash)
@@ -40,15 +96,64 @@ const getClientKey = (req: Request, email?: string): string => {
 };
 
 /**
- * Track failed login attempt
+ * Get failed login record from Redis or memory
  */
-export const trackFailedLogin = (req: Request, email?: string): void => {
+const getFailedLoginRecord = async (key: string): Promise<FailedLoginRecord | null> => {
+  if (redisClient) {
+    try {
+      const data = await redisClient.get(`${REDIS_KEY_PREFIX}${key}`);
+      if (data) {
+        return JSON.parse(data);
+      }
+    } catch (err) {
+      logger.warn({ err, key }, 'Redis get failed, falling back to memory');
+    }
+  }
+  return failedLoginsMemory.get(key) || null;
+};
+
+/**
+ * Set failed login record in Redis or memory
+ */
+const setFailedLoginRecord = async (key: string, record: FailedLoginRecord): Promise<void> => {
+  if (redisClient) {
+    try {
+      // Set with TTL matching the login window + block duration
+      const ttl = Math.ceil((LOGIN_ATTEMPT_WINDOW + BLOCK_DURATION) / 1000);
+      await redisClient.setex(`${REDIS_KEY_PREFIX}${key}`, ttl, JSON.stringify(record));
+      return;
+    } catch (err) {
+      logger.warn({ err, key }, 'Redis set failed, falling back to memory');
+    }
+  }
+  failedLoginsMemory.set(key, record);
+};
+
+/**
+ * Delete failed login record from Redis or memory
+ */
+const deleteFailedLoginRecord = async (key: string): Promise<void> => {
+  if (redisClient) {
+    try {
+      await redisClient.del(`${REDIS_KEY_PREFIX}${key}`);
+      return;
+    } catch (err) {
+      logger.warn({ err, key }, 'Redis del failed, falling back to memory');
+    }
+  }
+  failedLoginsMemory.delete(key);
+};
+
+/**
+ * Track failed login attempt (async with Redis support)
+ */
+export const trackFailedLogin = async (req: Request, email?: string): Promise<void> => {
   const key = getClientKey(req, email);
   const now = Date.now();
-  const record = failedLogins.get(key);
+  const record = await getFailedLoginRecord(key);
 
   if (!record) {
-    failedLogins.set(key, {
+    await setFailedLoginRecord(key, {
       count: 1,
       firstAttempt: now,
       lastAttempt: now,
@@ -59,7 +164,7 @@ export const trackFailedLogin = (req: Request, email?: string): void => {
 
   // Reset if window expired
   if (now - record.firstAttempt > LOGIN_ATTEMPT_WINDOW) {
-    failedLogins.set(key, {
+    await setFailedLoginRecord(key, {
       count: 1,
       firstAttempt: now,
       lastAttempt: now,
@@ -78,23 +183,23 @@ export const trackFailedLogin = (req: Request, email?: string): void => {
     logger.warn({ key, attempts: record.count }, 'Login blocked due to too many failed attempts');
   }
 
-  failedLogins.set(key, record);
+  await setFailedLoginRecord(key, record);
 };
 
 /**
  * Reset failed login counter (call on successful login)
  */
-export const resetFailedLogin = (req: Request, email?: string): void => {
+export const resetFailedLogin = async (req: Request, email?: string): Promise<void> => {
   const key = getClientKey(req, email);
-  failedLogins.delete(key);
+  await deleteFailedLoginRecord(key);
 };
 
 /**
  * Check if login is blocked
  */
-export const isLoginBlocked = (req: Request, email?: string): { blocked: boolean; remainingTime?: number; attempts?: number } => {
+export const isLoginBlocked = async (req: Request, email?: string): Promise<{ blocked: boolean; remainingTime?: number; attempts?: number }> => {
   const key = getClientKey(req, email);
-  const record = failedLogins.get(key);
+  const record = await getFailedLoginRecord(key);
   const now = Date.now();
 
   if (!record) {
@@ -104,7 +209,7 @@ export const isLoginBlocked = (req: Request, email?: string): { blocked: boolean
   // Check if block expired
   if (record.blocked && record.blockedUntil) {
     if (now >= record.blockedUntil) {
-      failedLogins.delete(key);
+      await deleteFailedLoginRecord(key);
       return { blocked: false };
     }
     return {
@@ -116,7 +221,7 @@ export const isLoginBlocked = (req: Request, email?: string): { blocked: boolean
 
   // Check if window expired (cleanup)
   if (now - record.firstAttempt > LOGIN_ATTEMPT_WINDOW) {
-    failedLogins.delete(key);
+    await deleteFailedLoginRecord(key);
     return { blocked: false };
   }
 
@@ -126,9 +231,9 @@ export const isLoginBlocked = (req: Request, email?: string): { blocked: boolean
 /**
  * Get progressive delay based on failed attempts
  */
-export const getProgressiveDelay = (req: Request, email?: string): number => {
+export const getProgressiveDelay = async (req: Request, email?: string): Promise<number> => {
   const key = getClientKey(req, email);
-  const record = failedLogins.get(key);
+  const record = await getFailedLoginRecord(key);
   
   if (!record) return 0;
   
@@ -137,11 +242,11 @@ export const getProgressiveDelay = (req: Request, email?: string): number => {
 };
 
 /**
- * Middleware to check login block status
+ * Middleware to check login block status (async)
  */
-export const checkLoginBlock = (req: Request, res: Response, next: NextFunction): void => {
+export const checkLoginBlock = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const email = req.body?.email;
-  const blockStatus = isLoginBlocked(req, email);
+  const blockStatus = await isLoginBlocked(req, email);
 
   if (blockStatus.blocked) {
     logger.warn({ ip: req.ip, email }, 'Blocked login attempt');
@@ -154,7 +259,7 @@ export const checkLoginBlock = (req: Request, res: Response, next: NextFunction)
   }
 
   // Apply progressive delay
-  const delay = getProgressiveDelay(req, email);
+  const delay = await getProgressiveDelay(req, email);
   if (delay > 0) {
     setTimeout(() => next(), delay);
     return;
@@ -164,29 +269,51 @@ export const checkLoginBlock = (req: Request, res: Response, next: NextFunction)
 };
 
 /**
- * Cleanup expired records (run periodically)
+ * Cleanup expired records from memory (Redis handles TTL automatically)
  */
 export const cleanupExpiredRecords = (): void => {
   const now = Date.now();
-  for (const [key, record] of failedLogins.entries()) {
+  for (const [key, record] of failedLoginsMemory.entries()) {
     if (now - record.firstAttempt > LOGIN_ATTEMPT_WINDOW) {
-      failedLogins.delete(key);
+      failedLoginsMemory.delete(key);
     }
   }
 };
 
-// Cleanup every 5 minutes
+// Cleanup every 5 minutes (only for in-memory fallback)
 setInterval(cleanupExpiredRecords, 5 * 60 * 1000);
 
 // ============================================
-// EXPRESS RATE LIMITERS
+// EXPRESS RATE LIMITERS WITH REDIS STORE
 // ============================================
+
+/**
+ * Create Redis store for rate limiting if Redis is available
+ */
+const createRateLimitStore = () => {
+  if (redisClient) {
+    try {
+      return new RedisStore({
+        // @ts-expect-error - Types mismatch but works at runtime
+        sendCommand: (...args: string[]) => redisClient!.call(...args),
+        prefix: 'rl:'
+      });
+    } catch (err) {
+      logger.warn({ err }, 'Failed to create Redis store, using memory');
+      return undefined;
+    }
+  }
+  return undefined;
+};
+
+const rateLimitStore = createRateLimitStore();
 
 export const generalRateLimiter = rateLimit({
   windowMs: securityConfig.rateLimit.windowMs,
   max: securityConfig.rateLimit.max,
   standardHeaders: true,
   legacyHeaders: false,
+  store: rateLimitStore, // Use Redis store if available
   keyGenerator: (req: Request): string => {
     // Use X-Forwarded-For if behind proxy, otherwise use IP
     return req.ip || req.socket.remoteAddress || 'unknown';
@@ -196,7 +323,7 @@ export const generalRateLimiter = rateLimit({
     return req.path === '/health' || req.path === '/api/v1/health';
   },
   handler: (req: Request, res: Response): void => {
-    logger.warn({ ip: req.ip, path: req.path }, 'Rate limit exceeded');
+    logger.warn({ ip: req.ip, path: req.path, usingRedis: !!redisClient }, 'Rate limit exceeded');
     res.status(429).json({
       status: 'error',
       message: 'Too many requests, please try again later.',
@@ -210,6 +337,7 @@ export const authRateLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
+  store: rateLimitStore, // Use Redis store if available
   keyGenerator: (req: Request): string => {
     // Combine IP with email for more accurate limiting
     const ip = req.ip || req.socket.remoteAddress || 'unknown';
@@ -237,11 +365,12 @@ export const strictRateLimiter = rateLimit({
   max: 3, // only 3 requests per 15 minutes
   standardHeaders: true,
   legacyHeaders: false,
+  store: rateLimitStore, // Use Redis store if available
   keyGenerator: (req: Request): string => {
     return req.ip || req.socket.remoteAddress || 'unknown';
   },
   handler: (req: Request, res: Response): void => {
-    logger.warn({ ip: req.ip, path: req.path }, 'Strict rate limit exceeded');
+    logger.warn({ ip: req.ip, path: req.path, usingRedis: !!redisClient }, 'Strict rate limit exceeded');
     res.status(429).json({
       status: 'error',
       message: 'Too many requests for this sensitive operation. Please try again later.',
@@ -329,6 +458,7 @@ export const detectSuspiciousAutomation = (options: {
  * 
  * SECURITY: More aggressive rate limiting for authentication endpoints
  * to prevent credential stuffing and brute force attacks.
+ * Uses Redis for distributed rate limiting across multiple instances.
  */
 export const enhancedAuthRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes window
@@ -350,6 +480,7 @@ export const enhancedAuthRateLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  store: rateLimitStore, // Use Redis store if available
   keyGenerator: (req: Request): string => {
     const ip = req.ip || req.socket.remoteAddress || 'unknown';
     const email = req.body?.email;
@@ -376,7 +507,8 @@ export const enhancedAuthRateLimiter = rateLimit({
       ip: req.ip,
       path: req.path,
       isAutomated: automationResult.isAutomated,
-      confidence: automationResult.confidence
+      confidence: automationResult.confidence,
+      usingRedis: !!redisClient
     }, 'Enhanced auth rate limit exceeded');
     
     res.status(429).json({
@@ -385,4 +517,13 @@ export const enhancedAuthRateLimiter = rateLimit({
       retryAfter: 900 // 15 minutes
     });
   }
+});
+
+/**
+ * Export Redis client status for health checks
+ */
+export const getRateLimitStatus = () => ({
+  redisEnabled: redisConfig.enabled,
+  redisConnected: redisClient?.status === 'ready',
+  usingDistributedStore: !!rateLimitStore
 });
