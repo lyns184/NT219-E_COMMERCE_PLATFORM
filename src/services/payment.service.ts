@@ -1,10 +1,12 @@
 import Stripe from 'stripe';
 import { stripeConfig } from '../config/env';
 import { ProductModel, ProductDocument } from '../models/product.model';
-import { createOrder, updateOrderStatusByPaymentIntent } from './order.service';
+import { createOrder, updateOrderStatusByPaymentIntent, getOrderDetails } from './order.service';
 import { clearCartIfExists } from './cart.service';
 import { logPaymentEvent } from './audit.service';
 import { detectPaymentFraud } from './anomaly.service';
+import { sendOrderConfirmationEmail } from './email.service';
+import { UserModel } from '../models/user.model';
 import logger from '../utils/logger';
 
 const stripe = new Stripe(stripeConfig.secretKey, {
@@ -148,6 +150,28 @@ export const handleStripeEvent = async (event: Stripe.Event): Promise<void> => {
           
           await clearCartIfExists(paymentIntent.metadata.userId);
           logger.info({ userId: paymentIntent.metadata.userId }, 'Cart cleared after successful payment');
+
+          // Send order confirmation email
+          try {
+            const order = await getOrderDetails(paymentIntent.metadata.orderId);
+            if (order) {
+              const user = await UserModel.findById(paymentIntent.metadata.userId);
+              if (user) {
+                await sendOrderConfirmationEmail(user.email, {
+                  orderId: order._id.toString(),
+                  items: order.items.map(item => ({
+                    name: item.name,
+                    quantity: item.quantity,
+                    price: item.price
+                  })),
+                  total: order.totalAmount
+                });
+                logger.info({ userId: user.id, orderId: order._id }, 'Order confirmation email sent');
+              }
+            }
+          } catch (error) {
+            logger.error({ err: error, orderId: paymentIntent.metadata.orderId }, 'Failed to send order confirmation email');
+          }
         }
       } else {
         logger.warn({ paymentIntentId: paymentIntent.id }, 'Payment intent succeeded but no orderId in metadata');

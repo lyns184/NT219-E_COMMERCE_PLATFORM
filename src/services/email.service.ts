@@ -427,6 +427,191 @@ export const sendTestEmail = async (email: string): Promise<void> => {
   });
 };
 
+/**
+ * Send 2FA disabled notification
+ */
+export const send2FADisabledEmail = async (email: string): Promise<void> => {
+  const securityUrl = `${urlConfig.frontend}/account/security`;
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .alert { background-color: #FEF3C7; padding: 15px; border-radius: 5px; margin: 15px 0; }
+          .button { 
+            display: inline-block; 
+            padding: 12px 24px; 
+            background-color: #F59E0B; 
+            color: white; 
+            text-decoration: none; 
+            border-radius: 5px; 
+            margin: 20px 0;
+          }
+          .footer { margin-top: 30px; font-size: 12px; color: #666; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h2>Two-Factor Authentication Disabled</h2>
+          <div class="alert">
+            <strong>⚠️ Security Notice:</strong> Two-factor authentication has been disabled on your account.
+          </div>
+          <p>If you made this change, no further action is needed.</p>
+          <p>If you did NOT disable 2FA, your account may be compromised. Please:</p>
+          <ol>
+            <li>Change your password immediately</li>
+            <li>Re-enable two-factor authentication</li>
+            <li>Review your account activity</li>
+          </ol>
+          <a href="${securityUrl}" class="button">Review Security Settings</a>
+          <div class="footer">
+            <p>Time: ${new Date().toLocaleString()}</p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  await sendEmail({
+    to: email,
+    subject: '⚠️ Two-Factor Authentication Disabled',
+    html,
+    text: '2FA has been disabled on your account. If this wasn\'t you, please secure your account immediately.'
+  });
+};
+
+/**
+ * Send backup codes regenerated notification
+ */
+export const sendBackupCodesRegeneratedEmail = async (email: string): Promise<void> => {
+  const securityUrl = `${urlConfig.frontend}/account/security`;
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .info { background-color: #DBEAFE; padding: 15px; border-radius: 5px; margin: 15px 0; }
+          .footer { margin-top: 30px; font-size: 12px; color: #666; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h2>Backup Codes Regenerated</h2>
+          <div class="info">
+            <strong>ℹ️ Notice:</strong> Your 2FA backup codes have been regenerated.
+          </div>
+          <p>Your old backup codes are no longer valid. Make sure to save your new backup codes in a safe place.</p>
+          <p>If you did NOT regenerate these codes, please change your password immediately and contact support.</p>
+          <div class="footer">
+            <p>Time: ${new Date().toLocaleString()}</p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  await sendEmail({
+    to: email,
+    subject: 'ℹ️ Backup Codes Regenerated',
+    html,
+    text: 'Your 2FA backup codes have been regenerated. Old codes are no longer valid.'
+  });
+};
+
+/**
+ * Send order confirmation email
+ */
+export const sendOrderConfirmationEmail = async (
+  email: string,
+  orderDetails: {
+    orderId: string;
+    items: Array<{ name: string; quantity: number; price: number }>;
+    total: number;
+    shippingAddress?: string;
+  }
+): Promise<void> => {
+  const ordersUrl = `${urlConfig.frontend}/orders`;
+  
+  const itemsHtml = orderDetails.items.map(item => `
+    <tr>
+      <td style="padding: 8px; border-bottom: 1px solid #E5E7EB;">${item.name}</td>
+      <td style="padding: 8px; border-bottom: 1px solid #E5E7EB; text-align: center;">${item.quantity}</td>
+      <td style="padding: 8px; border-bottom: 1px solid #E5E7EB; text-align: right;">$${item.price.toFixed(2)}</td>
+    </tr>
+  `).join('');
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .success { background-color: #D1FAE5; padding: 15px; border-radius: 5px; margin: 15px 0; }
+          .order-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+          .order-table th { background-color: #F3F4F6; padding: 10px; text-align: left; }
+          .total { font-size: 18px; font-weight: bold; margin: 20px 0; }
+          .button { 
+            display: inline-block; 
+            padding: 12px 24px; 
+            background-color: #10B981; 
+            color: white; 
+            text-decoration: none; 
+            border-radius: 5px; 
+            margin: 20px 0;
+          }
+          .footer { margin-top: 30px; font-size: 12px; color: #666; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h2>Order Confirmation</h2>
+          <div class="success">
+            <strong>✅ Thank you for your order!</strong>
+          </div>
+          <p><strong>Order ID:</strong> ${orderDetails.orderId}</p>
+          
+          <table class="order-table">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th style="text-align: center;">Qty</th>
+                <th style="text-align: right;">Price</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsHtml}
+            </tbody>
+          </table>
+          
+          <p class="total">Total: $${orderDetails.total.toFixed(2)}</p>
+          
+          ${orderDetails.shippingAddress ? `<p><strong>Shipping to:</strong> ${orderDetails.shippingAddress}</p>` : ''}
+          
+          <a href="${ordersUrl}" class="button">View Order</a>
+          
+          <div class="footer">
+            <p>Thank you for shopping with us!</p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  await sendEmail({
+    to: email,
+    subject: `✅ Order Confirmed - #${orderDetails.orderId.slice(-8).toUpperCase()}`,
+    html,
+    text: `Your order #${orderDetails.orderId} has been confirmed. Total: $${orderDetails.total.toFixed(2)}`
+  });
+};
+
 export default {
   sendVerificationEmail,
   sendPasswordResetEmail,
@@ -434,5 +619,8 @@ export default {
   sendSuspiciousLoginAlert,
   sendPasswordChangedEmail,
   sendAccountLockedEmail,
-  sendTestEmail
+  sendTestEmail,
+  send2FADisabledEmail,
+  sendBackupCodesRegeneratedEmail,
+  sendOrderConfirmationEmail
 };

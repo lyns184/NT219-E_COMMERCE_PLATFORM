@@ -23,9 +23,11 @@ import {
   sendVerificationEmail,
   sendPasswordResetEmail,
   send2FAEnabledEmail,
+  send2FADisabledEmail,
   sendPasswordChangedEmail,
   sendSuspiciousLoginAlert,
-  sendAccountLockedEmail
+  sendAccountLockedEmail,
+  sendBackupCodesRegeneratedEmail
 } from './email.service';
 import {
   generate2FASecret,
@@ -742,6 +744,13 @@ export const disable2FA = async (userId: string, password: string, code: string)
   user.twoFactorBackupCodes = undefined;
   await user.save();
 
+  // Send notification email
+  try {
+    await send2FADisabledEmail(user.email);
+  } catch (error) {
+    logger.error({ err: error, userId: user.id }, 'Failed to send 2FA disabled email');
+  }
+
   logger.info({ userId: user.id }, '2FA disabled');
 
   return { message: '2FA disabled successfully' };
@@ -769,6 +778,13 @@ export const regenerateBackupCodes = async (userId: string, password: string) =>
   const { backupCodes } = await generate2FASecret(user.email);
   user.twoFactorBackupCodes = await hashBackupCodes(backupCodes);
   await user.save();
+
+  // Send notification email
+  try {
+    await sendBackupCodesRegeneratedEmail(user.email);
+  } catch (error) {
+    logger.error({ err: error, userId: user.id }, 'Failed to send backup codes regenerated email');
+  }
 
   logger.info({ userId: user.id }, 'Backup codes regenerated');
 
