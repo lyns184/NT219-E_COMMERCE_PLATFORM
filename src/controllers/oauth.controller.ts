@@ -124,7 +124,8 @@ export const githubCallbackHandler = async (req: Request, res: Response) => {
       email: user.email,
       role: user.role,
       tokenVersion: user.tokenVersion,
-      fingerprint
+      fingerprint,
+      ip: ipAddress
     });
 
     const family = uuidv4();
