@@ -430,7 +430,7 @@ export const loginWith2FA = async (tempToken: string, code: string, deviceInfo: 
 
 /**
  * Refresh access token using refresh token
- * Implements automatic token rotation
+ * Implements automatic token rotation with device verification
  */
 export const refreshAccessToken = async (refreshTokenString: string, deviceInfo: DeviceInfo) => {
   // Validate and get stored token
@@ -450,6 +450,30 @@ export const refreshAccessToken = async (refreshTokenString: string, deviceInfo:
   if (payload.tokenVersion !== user.tokenVersion) {
     logger.warn({ userId: user.id }, 'Token version mismatch - tokens invalidated');
     throw new Error('Token invalidated');
+  }
+
+  // SECURITY: Verify device fingerprint matches the original login device
+  // This prevents stolen refresh tokens from being used on different devices
+  const currentFingerprint = generateFingerprint(deviceInfo.userAgent, deviceInfo.ipAddress);
+  const storedFingerprint = generateFingerprint(storedToken.userAgent, storedToken.ipAddress);
+  
+  if (currentFingerprint !== storedFingerprint) {
+    // Device mismatch - potential token theft!
+    logger.warn({
+      userId: user.id,
+      storedIp: storedToken.ipAddress,
+      currentIp: deviceInfo.ipAddress,
+      storedUserAgent: storedToken.userAgent?.substring(0, 50),
+      currentUserAgent: deviceInfo.userAgent?.substring(0, 50)
+    }, 'Refresh token used from different device - possible token theft');
+    
+    // Revoke the token immediately
+    await revokeRefreshToken(refreshTokenString, 'Device fingerprint mismatch - possible theft');
+    
+    // Optionally revoke all tokens for this user (more aggressive)
+    // await revokeAllUserTokens(user.id, 'Suspicious refresh token usage detected');
+    
+    throw new Error('Session invalid. Please login again.');
   }
 
   // Revoke old refresh token FIRST to prevent race conditions
