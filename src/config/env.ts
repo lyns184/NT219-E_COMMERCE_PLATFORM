@@ -17,8 +17,11 @@ const envSchema = z.object({
   PORT: z.string().regex(/^\d+$/).default('5000'),
   MONGO_URI: z.string().min(1, 'MONGO_URI is required'),
   CLIENT_ORIGIN: z.string().url('CLIENT_ORIGIN must be a valid URL').optional(),
-  JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET must be at least 32 characters'),
-  JWT_REFRESH_SECRET: z.string().min(32, 'JWT_REFRESH_SECRET must be at least 32 characters'),
+  // RS256 JWT Configuration - Using RSA key files instead of secrets
+  JWT_ACCESS_PRIVATE_KEY_PATH: z.string().default('./keys/jwt-private.pem'),
+  JWT_ACCESS_PUBLIC_KEY_PATH: z.string().default('./keys/jwt-public.pem'),
+  JWT_REFRESH_PRIVATE_KEY_PATH: z.string().default('./keys/jwt-refresh-private.pem'),
+  JWT_REFRESH_PUBLIC_KEY_PATH: z.string().default('./keys/jwt-refresh-public.pem'),
   JWT_ACCESS_EXPIRY: z.string().default('15m'),
   JWT_REFRESH_EXPIRY: z.string().default('7d'),
   STRIPE_SECRET_KEY: z.string().min(1, 'STRIPE_SECRET_KEY is required'),
@@ -92,11 +95,13 @@ export const securityConfig = {
 
 export const authConfig = {
   accessToken: {
-    secret: env.JWT_ACCESS_SECRET,
+    privateKeyPath: env.JWT_ACCESS_PRIVATE_KEY_PATH,
+    publicKeyPath: env.JWT_ACCESS_PUBLIC_KEY_PATH,
     expiresIn: env.JWT_ACCESS_EXPIRY
   },
   refreshToken: {
-    secret: env.JWT_REFRESH_SECRET,
+    privateKeyPath: env.JWT_REFRESH_PRIVATE_KEY_PATH,
+    publicKeyPath: env.JWT_REFRESH_PUBLIC_KEY_PATH,
     expiresIn: env.JWT_REFRESH_EXPIRY
   }
 };

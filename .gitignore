@@ -7,6 +7,13 @@ coverage/
 .env.vault
 logs/
 
+# RSA Keys - NEVER commit private keys!
+keys/*.pem
+keys/jwt-private.pem
+keys/jwt-public.pem
+keys/jwt-refresh-private.pem
+keys/jwt-refresh-public.pem
+
 # Allow .env.example to be committed
 !.env.example
 npm-debug.log*

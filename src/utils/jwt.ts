@@ -1,8 +1,28 @@
 import jwt, { Secret, SignOptions } from 'jsonwebtoken';
 import crypto from 'crypto';
 import { v4 as uuid } from 'uuid';
+import fs from 'fs';
+import path from 'path';
 import { authConfig } from '../config/env';
 import type { AccessTokenPayload, RefreshTokenPayload } from '../types';
+
+// Load RSA keys at startup
+const loadKey = (keyPath: string): string => {
+  try {
+    const fullPath = path.resolve(process.cwd(), keyPath);
+    return fs.readFileSync(fullPath, 'utf8');
+  } catch (error) {
+    throw new Error(`Failed to load RSA key from ${keyPath}: ${error}`);
+  }
+};
+
+// Access Token Keys
+const ACCESS_PRIVATE_KEY = loadKey(authConfig.accessToken.privateKeyPath);
+const ACCESS_PUBLIC_KEY = loadKey(authConfig.accessToken.publicKeyPath);
+
+// Refresh Token Keys
+const REFRESH_PRIVATE_KEY = loadKey(authConfig.refreshToken.privateKeyPath);
+const REFRESH_PUBLIC_KEY = loadKey(authConfig.refreshToken.publicKeyPath);
 
 // Re-export enhanced fingerprint functions from dedicated module
 export { 
@@ -28,7 +48,8 @@ export const generateFingerprint = (userAgent: string, ipAddress: string): strin
 };
 
 /**
- * Sign Access Token with enhanced security
+ * Sign Access Token with RS256 (RSA + SHA256)
+ * Uses asymmetric encryption - private key to sign, public key to verify
  */
 interface AccessTokenInput {
   sub: string; // userId
@@ -41,9 +62,9 @@ interface AccessTokenInput {
 
 export const signAccessToken = (payload: AccessTokenInput): string => {
   const jti = uuid(); // Unique token ID
-  const secret: Secret = authConfig.accessToken.secret;
   const options: SignOptions = {
-    expiresIn: authConfig.accessToken.expiresIn as SignOptions['expiresIn']
+    expiresIn: authConfig.accessToken.expiresIn as SignOptions['expiresIn'],
+    algorithm: 'RS256' // Use RS256 algorithm
   };
 
   return jwt.sign(
@@ -56,13 +77,14 @@ export const signAccessToken = (payload: AccessTokenInput): string => {
       ip: payload.ip,
       jti
     },
-    secret,
+    ACCESS_PRIVATE_KEY, // Use private key to sign
     options
   );
 };
 
 /**
- * Sign Refresh Token
+ * Sign Refresh Token with RS256
+ * Uses separate key pair for refresh tokens
  */
 interface RefreshTokenInput {
   sub: string; // userId
@@ -71,9 +93,9 @@ interface RefreshTokenInput {
 }
 
 export const signRefreshToken = (payload: RefreshTokenInput): string => {
-  const secret: Secret = authConfig.refreshToken.secret;
   const options: SignOptions = {
-    expiresIn: authConfig.refreshToken.expiresIn as SignOptions['expiresIn']
+    expiresIn: authConfig.refreshToken.expiresIn as SignOptions['expiresIn'],
+    algorithm: 'RS256' // Use RS256 algorithm
   };
 
   return jwt.sign(
@@ -83,21 +105,19 @@ export const signRefreshToken = (payload: RefreshTokenInput): string => {
       tokenVersion: payload.tokenVersion,
       type: 'refresh'
     },
-    secret,
+    REFRESH_PRIVATE_KEY, // Use refresh private key to sign
     options
   );
 };
 
 /**
- * Verify Access Token with fingerprint validation
- * SECURITY: Explicitly specify allowed algorithms to prevent algorithm confusion attacks
+ * Verify Access Token with RS256 and fingerprint validation
+ * SECURITY: Uses public key to verify signature - prevents algorithm confusion attacks
  */
 export const verifyAccessToken = (
   token: string,
   fingerprint?: string
 ): AccessTokenPayload => {
-  const secret: Secret = authConfig.accessToken.secret;
-  
   // SECURITY: Validate token format first
   const parts = token.split('.');
   if (parts.length !== 3) {
@@ -114,9 +134,9 @@ export const verifyAccessToken = (
       throw new Error('Algorithm "none" is not allowed');
     }
     
-    // Only allow HS256 - reject all other algorithms
-    if (header.alg !== 'HS256') {
-      throw new Error(`Algorithm "${header.alg}" is not allowed. Only HS256 is supported.`);
+    // Only allow RS256 - reject all other algorithms
+    if (header.alg !== 'RS256') {
+      throw new Error(`Algorithm "${header.alg}" is not allowed. Only RS256 is supported.`);
     }
   } catch (e) {
     if (e instanceof SyntaxError) {
@@ -125,9 +145,9 @@ export const verifyAccessToken = (
     throw e;
   }
   
-  // Now verify with strict options
-  const payload = jwt.verify(token, secret, {
-    algorithms: ['HS256'],  // SECURITY: Only allow HS256 algorithm
+  // Now verify with RS256 using public key
+  const payload = jwt.verify(token, ACCESS_PUBLIC_KEY, {
+    algorithms: ['RS256'],  // SECURITY: Only allow RS256 algorithm
     complete: false
   }) as AccessTokenPayload;
 
@@ -145,12 +165,10 @@ export const verifyAccessToken = (
 };
 
 /**
- * Verify Refresh Token
- * SECURITY: Explicitly specify allowed algorithms
+ * Verify Refresh Token with RS256
+ * SECURITY: Uses public key to verify - prevents algorithm confusion attacks
  */
 export const verifyRefreshToken = (token: string): RefreshTokenPayload => {
-  const secret: Secret = authConfig.refreshToken.secret;
-  
   // SECURITY: Validate token format first
   const parts = token.split('.');
   if (parts.length !== 3) {
@@ -167,9 +185,9 @@ export const verifyRefreshToken = (token: string): RefreshTokenPayload => {
       throw new Error('Algorithm "none" is not allowed');
     }
     
-    // Only allow HS256
-    if (header.alg !== 'HS256') {
-      throw new Error(`Algorithm "${header.alg}" is not allowed`);
+    // Only allow RS256
+    if (header.alg !== 'RS256') {
+      throw new Error(`Algorithm "${header.alg}" is not allowed. Only RS256 is supported.`);
     }
   } catch (e) {
     if (e instanceof SyntaxError) {
@@ -178,8 +196,9 @@ export const verifyRefreshToken = (token: string): RefreshTokenPayload => {
     throw e;
   }
   
-  const payload = jwt.verify(token, secret, {
-    algorithms: ['HS256']  // SECURITY: Only allow HS256 algorithm
+  // Verify with RS256 using refresh public key
+  const payload = jwt.verify(token, REFRESH_PUBLIC_KEY, {
+    algorithms: ['RS256']  // SECURITY: Only allow RS256 algorithm
   }) as RefreshTokenPayload;
   
   // SECURITY: Validate required claims

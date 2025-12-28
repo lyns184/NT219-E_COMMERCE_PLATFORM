@@ -182,12 +182,16 @@ class VaultClient {
 
   /**
    * Fallback to environment variables when Vault is unavailable
+   * Note: For RS256 JWT, keys are loaded from files, not env vars
    */
   private getFallbackSecrets(): SecretData {
     return {
       MONGO_URI: process.env.MONGO_URI,
-      JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET,
-      JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET,
+      // RS256 JWT uses key files, not secrets
+      JWT_ACCESS_PRIVATE_KEY_PATH: process.env.JWT_ACCESS_PRIVATE_KEY_PATH,
+      JWT_ACCESS_PUBLIC_KEY_PATH: process.env.JWT_ACCESS_PUBLIC_KEY_PATH,
+      JWT_REFRESH_PRIVATE_KEY_PATH: process.env.JWT_REFRESH_PRIVATE_KEY_PATH,
+      JWT_REFRESH_PUBLIC_KEY_PATH: process.env.JWT_REFRESH_PUBLIC_KEY_PATH,
       ENCRYPTION_KEY: process.env.ENCRYPTION_KEY,
       STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
       STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
