@@ -44,6 +44,9 @@ RUN npm ci --only=production && \
 # Copy built files from builder stage
 COPY --from=builder /app/dist ./dist
 
+# Copy RSA keys for JWT RS256
+COPY --chown=nodejs:nodejs keys ./keys
+
 # Create uploads directory (will be mounted as volume)
 RUN mkdir -p uploads/prototypes && chown -R nodejs:nodejs uploads
 
