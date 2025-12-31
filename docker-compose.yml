@@ -58,7 +58,7 @@ services:
         environment:
             VAULT_ADDR: http://0.0.0.0:8202
             VAULT_API_ADDR: http://0.0.0.0:8202
-            VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_ROOT_TOKEN:-dev-only-token}
+            VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_ROOT_TOKEN:-nt219-vault-prod-token-2025-x9K2mP7wQ4vL8nF6}
         cap_add:
             - IPC_LOCK
         volumes:
@@ -66,7 +66,7 @@ services:
             - vault_logs:/vault/logs
         networks:
             - nt219-network
-        command: server -dev -dev-root-token-id=${VAULT_ROOT_TOKEN:-dev-only-token}
+        command: server -dev -dev-root-token-id=${VAULT_ROOT_TOKEN:-nt219-vault-prod-token-2025-x9K2mP7wQ4vL8nF6}
         healthcheck:
             test: ['CMD', 'vault', 'status']
             interval: 10s
@@ -91,7 +91,7 @@ services:
             MONGO_URI: mongodb://mongodb:27017/security-nt219
             VAULT_ENABLED: ${VAULT_ENABLED:-false}
             VAULT_ADDR: http://vault:8202
-            VAULT_TOKEN: ${VAULT_ROOT_TOKEN:-dev-only-token}
+            VAULT_TOKEN: ${VAULT_ROOT_TOKEN:-nt219-vault-prod-token-2025-x9K2mP7wQ4vL8nF6}
             VAULT_SECRET_PATH: secret/data/demo-nt219
             REDIS_ENABLED: 'true'
             REDIS_URL: redis://redis:6379
